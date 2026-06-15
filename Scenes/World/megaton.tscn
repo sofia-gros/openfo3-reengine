@@ -1,0 +1,24 @@
+[gd_scene load_steps=4 format=3 uid="uid://cdg4pv7nuxvrl"]
+
+[ext_resource type="Script" uid="uid://dgaava0fn3b7p" path="res://Scenes/World/Megaton.cs" id="1_script"]
+[ext_resource type="Script" uid="uid://m6dtfh2qn6ef" path="res://Scripts/Core/FlyCam.gd" id="2_script"]
+
+[sub_resource type="Environment" id="Environment_jnfe6"]
+
+[node name="Megaton" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 5, 5)
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.78908396, 0, -0.6142851, 0, 1, 0, 0.6142851, 0, 0.78908396, 0, 20, 50)
+script = ExtResource("2_script")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_jnfe6")
+
+[node name="CSGBox3D" type="CSGBox3D" parent="."]
+transform = Transform3D(291.14334, 0, 0, 0, 1, 0, 0, 0, 240.95804, 116.69546, 0, 45.944393)
+visible = false
+size = Vector3(1.8016357, 1, 1.3813477)

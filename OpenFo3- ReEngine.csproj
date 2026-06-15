@@ -1,0 +1,8 @@
+<Project Sdk="Redot.NET.Sdk/26.1.0">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework Condition=" '$(GodotTargetPlatform)' == 'android' ">net9.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>OpenFo3ReEngine</RootNamespace>
+  </PropertyGroup>
+</Project>
