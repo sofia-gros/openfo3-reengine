@@ -158,19 +158,29 @@ namespace OpenFo3.NIF
         private static Node ParseNode(BinaryReader br, int blockIdx, string blockType, bool isGeometry = false)
         {
             var node = new Node();
+            long totalLen = br.BaseStream.Length;
+            bool dbg = (blockIdx == 0); // block 0 のみデバッグ出力
+
+            if (dbg) GD.Print($"[NIFBlockResolver] ParseNode block={blockIdx} ({blockType}) dataSize={totalLen} isGeom={isGeometry}");
 
             // 1. NiObjectNET fields
             uint nameIdx = br.ReadUInt32();
+            if (dbg) GD.Print($"  nameIdx={nameIdx} pos={br.BaseStream.Position}");
 
             uint numExtra = br.ReadUInt32();
+            if (dbg) GD.Print($"  numExtra={numExtra} pos={br.BaseStream.Position}");
             for (int i = 0; i < numExtra; i++) br.ReadInt32();
 
             int controllerRef = br.ReadInt32();
 
             // 2. NiAVObject fields
+            // FO3 20.2.0.7: flags は uint16 の後に Unknown Short (2バイト) が続き、
+            // 合計4バイト占有する。uint32 として読むのが正しい。
             uint flags = br.ReadUInt32();
+            if (dbg) GD.Print($"  flags={flags & 0xFFFF} (uint32={flags:X8}) pos={br.BaseStream.Position}");
 
             node.Translation = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+            if (dbg) GD.Print($"  Translation={node.Translation} pos={br.BaseStream.Position}");
 
             // Rotation Matrix (3x3, row-major)
             float m11 = br.ReadSingle(), m12 = br.ReadSingle(), m13 = br.ReadSingle();
@@ -183,9 +193,11 @@ namespace OpenFo3.NIF
             );
 
             node.Scale = br.ReadSingle();
+            if (dbg) GD.Print($"  Scale={node.Scale} pos={br.BaseStream.Position}");
 
             uint numProps = br.ReadUInt32();
-            
+            if (dbg) GD.Print($"  numProps={numProps} pos={br.BaseStream.Position}");
+
             for (int i = 0; i < numProps; i++)
             {
                 int propIdx = br.ReadInt32();
@@ -193,6 +205,8 @@ namespace OpenFo3.NIF
             }
 
             int collisionObject = br.ReadInt32();
+            if (dbg) GD.Print($"  collisionRef={collisionObject} pos={br.BaseStream.Position}");
+
 
             // 3. NiNode or NiGeometry fields
             if (isGeometry)

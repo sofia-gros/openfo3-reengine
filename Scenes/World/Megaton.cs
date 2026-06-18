@@ -68,8 +68,9 @@ public partial class Megaton : Node3D
 			_esm = new ESMReader(GamePaths.EsmPath);
 			_masterFormIDIndex = _esm.BuildFormIdIndex(new[]
 			{
-				"STAT","DOOR","FURN","ACTI","MSTT","LIGH","TERM",
-				"CONT","MISC","WEAP","ARMO","CLOT","TREE","ALCH","INGR","BOOK"
+				"STAT", "DOOR", "FURN", "ACTI", "MSTT", "LIGH", "TERM",
+				"CONT", "MISC", "WEAP", "ARMO", "CLOT", "TREE", "ALCH", "INGR", "BOOK",
+				"NPC_", "CREA", "GRAS", "LAND", "DEBR", "SCOL"
 			});
 
 			_refrFormIDIndex = _esm.BuildFormIdIndex(new[] { "REFR" });
@@ -208,12 +209,16 @@ public partial class Megaton : Node3D
 
 		var inst = new MeshInstance3D { Mesh = mesh };
 
+		// FO3 Intrinsic ZYX == Extrinsic XYZ
+		// FO3 X → Godot  X  (Vector3.Right)
+		// FO3 Y → Godot -Z  (Vector3.Forward)  ※ Back(+Z) ではなく Forward(-Z)
+		// FO3 Z → Godot  Y  (Vector3.Up)
 		var basis = Basis.Identity;
-		basis = basis.Rotated(Vector3.Up, req.Rotation.Z);
-		basis = basis.Rotated(Vector3.Right, req.Rotation.X);
-		basis = basis.Rotated(Vector3.Back, req.Rotation.Y);
-		inst.Transform = new Transform3D(basis, req.Position);
+		basis = basis.Rotated(Vector3.Right,   req.Rotation.X); // ① X軸まわり
+		basis = basis.Rotated(Vector3.Forward, req.Rotation.Y); // ② FO3 Y → Godot -Z
+		basis = basis.Rotated(Vector3.Up,      req.Rotation.Z); // ③ FO3 Z → Godot Y
 
+		inst.Transform = new Transform3D(basis, req.Position);
 		AddChild(inst);
 	}
 

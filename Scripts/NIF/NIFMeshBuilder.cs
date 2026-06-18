@@ -39,17 +39,41 @@ namespace OpenFo3.NIF
             var mesh = new ArrayMesh();
             float worldScale = 0.015f;
 
+            // FO3座標系 → Godot座標系 変換行列
+            // 変換規則: FO3(x, y, z) → Godot(x, z, -y)
+            // Godot の Basis(colX, colY, colZ) は列ベクトル形式:
+            //   colX = FO3のX軸がGodot空間で向く方向 = (1, 0, 0)
+            //   colY = FO3のY軸がGodot空間で向く方向 = (0, 0, -1)  ← GodotのZが-Y
+            //   colZ = FO3のZ軸がGodot空間で向く方向 = (0, 1, 0)   ← GodotのYがZ
+            var R_fo3_to_godot = new Basis(
+                new Vector3(1,  0,  0),   // FO3 X → Godot (1, 0, 0)
+                new Vector3(0,  0, -1),   // FO3 Y → Godot (0, 0,-1)
+                new Vector3(0,  1,  0)    // FO3 Z → Godot (0, 1, 0)
+            );
+
             foreach (var surface in geom.Surfaces)
             {
                 if (surface.Vertices == null || surface.Indices == null || surface.Indices.Length < 3)
                     continue;
 
+                // NIF内部TransformをGodot空間に変換:
+                // T_godot = R_conv * T_fo3 * R_conv^-1
+                // ただし頂点変換は R_conv * (T_fo3 * v_fo3) = R_conv * T_fo3 * v_fo3
+                // なので v_godot = (R_conv * R_fo3) * v_fo3_local + R_conv * t_fo3
+                var fo3Basis   = surface.Transform.Basis;
+                var fo3Origin  = surface.Transform.Origin;
+
+                // BasisをGodot空間に変換: B_godot = R_conv * B_fo3
+                var godotBasis  = R_fo3_to_godot * fo3Basis;
+                // 平行移動もGodot空間に変換
+                var godotOrigin = R_fo3_to_godot * fo3Origin;
+
                 Vector3[] godotVertices = new Vector3[surface.Vertices.Length];
                 for (int i = 0; i < surface.Vertices.Length; i++)
                 {
-                    var v = surface.Transform * surface.Vertices[i];
-                    v *= worldScale;
-                    godotVertices[i] = new Vector3(v.X, v.Z, -v.Y);
+                    // FO3空間での頂点をGodot空間に変換してスケール適用
+                    var v = godotBasis * surface.Vertices[i] + godotOrigin;
+                    godotVertices[i] = v * worldScale;
                 }
 
                 var arrays = new Godot.Collections.Array();

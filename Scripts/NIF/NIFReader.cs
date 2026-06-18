@@ -19,27 +19,27 @@ namespace OpenFo3.NIF
                 using var ms = new MemoryStream(data);
                 using var br = new BinaryReader(ms);
 
-                // 1. Header
+                // 1. Header String (newline terminated)
                 string headerStr = ReadHeaderString(br);
+
+                // 2. Fixed header fields
                 uint version = br.ReadUInt32();
                 byte endian = br.ReadByte();
                 uint userVersion = br.ReadUInt32();
                 uint numBlocks = br.ReadUInt32();
-                uint bsHeader = br.ReadUInt32();
 
-                // 2. Creator Strings
+                // 3. BSHeader: BSVersion (uint32) + 3 byte-length-prefixed strings
+                //    (Author, ProcessScript, ExportScript)
+                //    FO3 20.2.0.7 bsver=34: always 3 export info strings
+                uint bsVersion = br.ReadUInt32();
                 for (int i = 0; i < 3; i++)
                 {
-                    long currentPos = ms.Position;
-                    if (currentPos >= ms.Length) break;
                     byte len = br.ReadByte();
-                    if (len > 0 && len < 100) { 
-                        br.ReadBytes(len); 
-                    } else { 
-                        ms.Position = currentPos; 
-                        break; 
-                    }
+                    if (len > 0) br.ReadBytes(len);
                 }
+
+                // デバッグ: 最初の1件のみ出力
+                // GD.Print($"[NIFReader] bsver={bsVersion} numBlocks={numBlocks} posAfterHdr={ms.Position}");
 
                 // 3. Block Types
                 int numBlockTypes = (int)br.ReadUInt16();
@@ -60,32 +60,30 @@ namespace OpenFo3.NIF
                 for (int i = 0; i < (int)numBlocks; i++)
                     blockSizes[i] = br.ReadUInt32();
 
-                // 6. FO3 String Table
+                // 6. FO3 String Table (bsver >= 34 で存在)
                 if (ms.Position + 8 <= ms.Length)
                 {
                     uint numStrings = br.ReadUInt32();
                     uint maxStringLen = br.ReadUInt32();
-                    for (int i = 0; i < numStrings; i++)
+                    if (numStrings < 100000)
                     {
-                        uint len = br.ReadUInt32();
-                        Strings.Add(Encoding.ASCII.GetString(br.ReadBytes((int)len)).TrimEnd('\0'));
+                        for (int i = 0; i < numStrings; i++)
+                        {
+                            uint len = br.ReadUInt32();
+                            if (len > 512 || ms.Position + len > ms.Length) break;
+                            Strings.Add(Encoding.ASCII.GetString(br.ReadBytes((int)len)).TrimEnd('\0'));
+                        }
                     }
                 }
 
-                // 7. Groups (Roots) - FO3 20.2.0.7: numGroups(uint32), each: groupLen(uint32) + refs(int32*)
+                // 7. Root Blocks - FO3 20.2.0.7: numRoots(uint32) + refs(int32 * numRoots)
                 if (ms.Position + 4 <= ms.Length)
                 {
-                    uint numGroups = br.ReadUInt32();
-                    for (int i = 0; i < numGroups; i++)
+                    uint numRoots = br.ReadUInt32();
+                    for (int i = 0; i < numRoots && ms.Position + 4 <= ms.Length; i++)
                     {
-                        if (ms.Position + 4 > ms.Length) break;
-                        uint groupLen = br.ReadUInt32();
-                        for (int j = 0; j < groupLen; j++)
-                        {
-                            if (ms.Position + 4 > ms.Length) break;
-                            int rootIdx = br.ReadInt32();
-                            if (rootIdx != -1) RootBlockIndices.Add(rootIdx);
-                        }
+                        int rootIdx = br.ReadInt32();
+                        if (rootIdx != -1) RootBlockIndices.Add(rootIdx);
                     }
                 }
 
