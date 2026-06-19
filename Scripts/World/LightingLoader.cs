@@ -271,28 +271,39 @@ namespace OpenFo3.World
 
             light.Name = $"Light_{lightData.FormId:X8}";
             light.LightColor = lightData.Color;
-            light.LightEnergy = 1.0f;
+
+            // FO3 falloff exponent affects light attenuation.
+            float fo3Falloff = lightData.FalloffExponent > 0 ? lightData.FalloffExponent : 1.0f;
+            float godotAttenuation = Mathf.Clamp(fo3Falloff * 0.5f, 0.5f, 4.0f);
+            float godotEnergy = Mathf.Clamp(1.0f / fo3Falloff, 0.3f, 2.0f);
+
+            if (light is OmniLight3D omni)
+            {
+                omni.LightEnergy = godotEnergy;
+                omni.OmniAttenuation = godotAttenuation;
+            }
+            else if (light is SpotLight3D spot)
+            {
+                spot.LightEnergy = godotEnergy;
+                spot.SpotAttenuation = godotAttenuation;
+            }
 
             // Convert FO3 radius to Godot units (apply world scale)
+            // Minimum range of 0.5 Godot units prevents invisible micro-lights
             float radius = lightData.Radius * 0.015f;
-            if (light is OmniLight3D omni)
-                omni.OmniRange = Mathf.Max(radius, 1f);
-            else if (light is SpotLight3D spot)
-                spot.SpotRange = Mathf.Max(radius, 1f);
+            radius = Mathf.Max(radius, 0.5f);
+            if (light is OmniLight3D omni2)
+                omni2.OmniRange = radius;
+            else if (light is SpotLight3D spot2)
+                spot2.SpotRange = radius;
 
-            // Position: FO3 -> Godot coordinate conversion
-            float px = position.X;
-            float py = position.Z;
-            float pz = -position.Y;
-            light.Position = new Vector3(px, py, pz);
-
-            // Apply REFR rotation: same axis mapping as mesh instances
-            // FO3 RotZ -> Godot Up (-rz matches mesh convention), FO3 RotY -> Godot Forward, FO3 RotX -> Godot Right
+            // Position is already in Godot space (converted in Megaton.cs ProcessRecord).
+            // No re-conversion needed. Rotation: same axis mapping as mesh instances.
             var basis = Basis.Identity;
             basis = basis.Rotated(Vector3.Up,     -rotation.Z);
             basis = basis.Rotated(Vector3.Forward, rotation.Y);
             basis = basis.Rotated(Vector3.Right,   rotation.X);
-            light.Transform = new Transform3D(basis, light.Position);
+            light.Transform = new Transform3D(basis, position);
 
             return light;
         }
