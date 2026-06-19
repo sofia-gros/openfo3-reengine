@@ -153,6 +153,26 @@ NIF 内の bhk\* 物理ブロックからの衝突形状生成。
 
 ---
 
+## 実装ログ
+
+### 2026-06-19: #11 ライトの向きが正しくない問題 - 修正 (fix/light-direction)
+
+**問題分析:**
+1. **位置の二重変換**: `CreateLightNode` が受け取る `position` は `Megaton.cs.ProcessRecord` で既に Godot 座標に変換済み（`req.Position`、メッシュと同じ座標）。しかし `CreateLightNode` 内で再度 `(X, Z, -Y)` の座標変換を適用していたため位置がズレていた。
+2. **LightEnergy 固定値**: すべてのライトで `LightEnergy = 1.0f`。FO3 の `FalloffExponent` が無視。
+3. **範囲下限**: `Mathf.Max(radius, 1f)` により小さな光源の範囲が不自然に拡大。
+
+**修正内容:**
+- `LightingLoader.cs`:
+  - 位置の二重変換を削除、`position` を直接 `Transform3D` に使用
+  - `FalloffExponent` → `Attenuation` + `LightEnergy` の変換を追加
+  - 範囲下限を 1.0 → 0.5 Godot 単位に緩和
+
+**判断理由:**
+FO3 のライトを Redot 標準の OmniLight3D/SpotLight3D に変換する方針は維持。位置の二重変換が明らかなバグ。FalloffExponent からの減衰率計算は FO3 の挙動を模倣する合理的な方法。
+
+---
+
 ## 優先度（当面の目標）
 
 ## 実装ログ
@@ -178,6 +198,10 @@ FO3 の MegatonWorld は内装ワールドであり、LAND レコードを持た
 ---
 
 1. **高優先度** - レンダリングの完全性
+   - メガトンの地面がない問題（#10）
+   - [x] ライトの向きが正しくない問題（#11）
+   - ちらつきが直らない問題（#12）
+   - ノーマルマップ/スペキュラーマップの完全対応
    - [x] メガトンの地面がない問題（#10）
    - [ ] ライトの向きが正しくない問題（#11）
    - [ ] ちらつきが直らない問題（#12）
