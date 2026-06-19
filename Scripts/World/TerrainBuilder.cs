@@ -127,7 +127,7 @@ namespace OpenFo3.World
                 uint cellFormId = landEntry.CellFormId;
                 if (!TryGetCellCoord(cellFormId, out int cellX, out int cellY))
                 {
-                    GD.Print($"[TerrainBuilder] Failed to get cell coords for CELL 0x{cellFormId:X8} (LAND 0x{landFormId:X8})");
+                    GD.Print($"[TerrainBuilder] Failed to get cell coords for CELL 0x{cellFormId:X8} (LAND 0x{landFormId:X8}) - skipping LAND tile");
                     continue;
                 }
 
@@ -146,7 +146,22 @@ namespace OpenFo3.World
             }
 
             // Fill gaps with flat terrain
-            if (fillCellMaxX >= fillCellMinX && fillCellMaxY >= fillCellMinY)
+            bool hasValidBounds = fillCellMaxX >= fillCellMinX && fillCellMaxY >= fillCellMinY;
+            if (!hasValidBounds && coveredCells.Count > 0)
+            {
+                fillCellMinX = int.MaxValue; fillCellMinY = int.MaxValue;
+                fillCellMaxX = int.MinValue; fillCellMaxY = int.MinValue;
+                foreach (var (x, y) in coveredCells)
+                {
+                    if (x < fillCellMinX) fillCellMinX = x;
+                    if (x > fillCellMaxX) fillCellMaxX = x;
+                    if (y < fillCellMinY) fillCellMinY = y;
+                    if (y > fillCellMaxY) fillCellMaxY = y;
+                }
+                hasValidBounds = true;
+            }
+
+            if (hasValidBounds)
             {
                 int landMinX = int.MaxValue, landMinY = int.MaxValue;
                 int landMaxX = int.MinValue, landMaxY = int.MinValue;
@@ -191,7 +206,38 @@ namespace OpenFo3.World
                         }
                     }
                 }
-                GD.Print($"[TerrainBuilder] Built {flatBuilt} flat terrain tiles at default height {defaultLandHeight} (area {totalCells} cells)");
+                GD.Print($"[TerrainBuilder] Built {flatBuilt} gap-fill flat terrain tiles at default height {defaultLandHeight} (area {totalCells} cells)");
+            }
+
+            // If absolutely NO tiles were generated (no LAND records + no flat fill),
+            // force-generate flat terrain for the world cell bounds
+            if (tiles.Count == 0 && fillCellMaxX >= fillCellMinX && fillCellMaxY >= fillCellMinY)
+            {
+                int totalCells = (fillCellMaxX - fillCellMinX + 1) * (fillCellMaxY - fillCellMinY + 1);
+                int midX = (fillCellMinX + fillCellMaxX) / 2;
+                int midY = (fillCellMinY + fillCellMaxY) / 2;
+                int halfSize = 70;
+                int minX = Math.Max(fillCellMinX, midX - halfSize);
+                int maxX = Math.Min(fillCellMaxX, midX + halfSize);
+                int minY = Math.Max(fillCellMinY, midY - halfSize);
+                int maxY = Math.Min(fillCellMaxY, midY + halfSize);
+
+                GD.Print($"[TerrainBuilder] No tiles generated! Force-generating flat terrain for cell range ({minX},{minY})-({maxX},{maxY})");
+
+                int forceBuilt = 0;
+                for (int y = minY; y <= maxY; y++)
+                {
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        var flatTile = BuildFlatTerrainTile(x, y, defaultLandHeight, megatonCenter);
+                        if (flatTile != null)
+                        {
+                            tiles.Add(flatTile);
+                            forceBuilt++;
+                        }
+                    }
+                }
+                GD.Print($"[TerrainBuilder] Force-built {forceBuilt} flat terrain tiles at default height {defaultLandHeight}");
             }
 
             return tiles;
@@ -547,12 +593,12 @@ namespace OpenFo3.World
             for (int i = 0; i < 4; i++)
             {
                 norms[i] = Vector3.Up;
-                cols[i] = new Color(0.25f, 0.35f, 0.15f);
+                cols[i] = new Color(0.45f, 0.55f, 0.35f);
             }
             uvs[0] = new Vector2(0, 0);
-            uvs[1] = new Vector2(1, 0);
-            uvs[2] = new Vector2(1, 1);
-            uvs[3] = new Vector2(0, 1);
+            uvs[1] = new Vector2(CellSize / 256f, 0);
+            uvs[2] = new Vector2(CellSize / 256f, CellSize / 256f);
+            uvs[3] = new Vector2(0, CellSize / 256f);
 
             int[] indices = { 0, 1, 2, 0, 2, 3 };
 
@@ -569,6 +615,7 @@ namespace OpenFo3.World
 
             var mat = new StandardMaterial3D();
             mat.VertexColorUseAsAlbedo = true;
+            mat.AlbedoColor = new Color(0.45f, 0.55f, 0.35f);
             mesh.SurfaceSetMaterial(0, mat);
 
             var faceVerts = new Vector3[indices.Length];
