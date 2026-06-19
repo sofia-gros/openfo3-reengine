@@ -74,9 +74,26 @@ public partial class Megaton : Node3D
 			_esm = new ESMReader(GamePaths.EsmPath);
 			_masterFormIDIndex = _esm.BuildFormIdIndex(new[]
 			{
-				"STAT", "DOOR", "FURN", "ACTI", "MSTT", "LIGH", "TERM",
-				"CONT", "MISC", "WEAP", "ARMO", "CLOT", "TREE", "ALCH", "INGR", "BOOK",
-				"GRAS", "LAND", "DEBR", "SCOL"
+				"STAT",
+				"DOOR",
+				//"FURN",
+				// "ACTI",
+				// "MSTT",
+				// "LIGH",
+				// "TERM",
+				// "CONT",
+				// "MISC",
+				// "WEAP",
+				// "ARMO",
+				// "CLOT",
+				//"TREE",
+				//"ALCH",
+				//"INGR",
+				//"BOOK",
+				//"GRAS",
+				//"LAND",
+				//"DEBR",
+				//"SCOL"
 			});
 
 			_refrFormIDIndex = _esm.BuildFormIdIndex(new[] { "REFR" });
@@ -258,6 +275,22 @@ public partial class Megaton : Node3D
 			}
 
 			if (!nifPath.StartsWith("meshes/", StringComparison.OrdinalIgnoreCase)) nifPath = "meshes/" + nifPath;
+
+			// Skip editor/debug markers (root-level Marker*.nif) and effect/light/shadow helpers
+			string nifLower = nifPath.ToLowerInvariant();
+			string fname = System.IO.Path.GetFileName(nifLower);
+			bool isDebug =
+				nifLower.StartsWith("meshes/marker") ||           // meshes/MarkerX.nif, Marker_Map.nif etc.
+				nifLower.Contains("editormarker") ||              // meshes/.../EditorMarker.nif
+				fname.Contains("shadow") ||                       // Shadow volume meshes
+				fname.StartsWith("cone") ||                       // Cone-shaped debug helpers
+				(nifLower.Contains("/effects/") && fname.StartsWith("fxlight")); // FXLightBeam*.NIF
+
+			if (isDebug)
+			{
+				GD.Print($"[Megaton] Skipping debug marker: {nifPath}");
+				return;
+			}
 
 			EnsureNifParsed(nifPath);
 
