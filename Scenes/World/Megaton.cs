@@ -134,7 +134,18 @@ public partial class Megaton : Node3D
 							seCellX = BitConverter.ToInt16(mnam.Data, 12);
 							seCellY = BitConverter.ToInt16(mnam.Data, 14);
 						}
-						GD.Print($"[Megaton] MegatonWorld bounds: NW=({nwCellX},{nwCellY}) SE=({seCellX},{seCellY})");
+
+						// Ensure minimum terrain coverage: at least 20x20 cells centered on (0,0)
+						const int minHalf = 10;
+						int centerX = (nwCellX + seCellX) / 2;
+						int centerY = (nwCellY + seCellY) / 2;
+						int halfExtX = Math.Max((seCellX - nwCellX) / 2, minHalf) + 5;
+						int halfExtY = Math.Max((seCellY - nwCellY) / 2, minHalf) + 5;
+						nwCellX = centerX - halfExtX;
+						nwCellY = centerY - halfExtY;
+						seCellX = centerX + halfExtX;
+						seCellY = centerY + halfExtY;
+						GD.Print($"[Megaton] MegatonWorld bounds (expanded): NW=({nwCellX},{nwCellY}) SE=({seCellX},{seCellY})");
 
 						break;
 					}
