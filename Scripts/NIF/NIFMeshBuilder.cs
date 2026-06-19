@@ -4,13 +4,9 @@ using System.IO;
 
 namespace OpenFo3.NIF
 {
-    /// <summary>
-    /// Holds pre-parsed geometry data from a NIF file, safe to create on worker threads.
-    /// Call BuildArrayMesh() on the main thread to create the Godot ArrayMesh.
-    /// </summary>
     public class NIFGeometryData
     {
-        public List<(Vector3[] Vertices, Vector2[] UVs, int[] Indices, Transform3D Transform, string TexturePath)> Surfaces = new();
+        public List<(Vector3[] Vertices, Vector2[] UVs, int[] Indices, Transform3D Transform, string TexturePath, ShaderTextureInfo Shader, AlphaPropertyInfo Alpha)> Surfaces = new();
     }
 
     public static class NIFMeshBuilder
@@ -146,7 +142,8 @@ namespace OpenFo3.NIF
 
                     if (verts != null && inds != null && inds.Length >= 3)
                     {
-                        geom.Surfaces.Add((verts, uvs, inds, globalTransform, node.TexturePath));
+                        string texPath = node.ShaderInfo?.TexturePaths != null && node.ShaderInfo.TexturePaths.Length > 0 ? node.ShaderInfo.TexturePaths[0] : null;
+                        geom.Surfaces.Add((verts, uvs, inds, globalTransform, texPath, node.ShaderInfo, node.AlphaInfo));
                     }
                 }
             }

@@ -7,6 +7,24 @@ using Godot;
 
 namespace OpenFo3.NIF
 {
+    public class ShaderTextureInfo
+    {
+        public int ShaderType;
+        public uint ShaderFlags;
+        public uint ShaderFlags2;
+        public float EnvironmentMapScale;
+        public string[] TexturePaths;
+        public float RefractionStrength;
+        public float ParallaxScale;
+        public float ParallaxMaxPasses;
+    }
+
+    public class AlphaPropertyInfo
+    {
+        public ushort Flags;
+        public byte Threshold;
+    }
+
     public class NIFBlockResolver
     {
         public class Node
@@ -18,7 +36,8 @@ namespace OpenFo3.NIF
             public List<int> Children = new();
             public int DataIndex = -1;
             public List<int> PropertyIndices = new();
-            public string TexturePath; // Primary diffuse texture
+            public ShaderTextureInfo ShaderInfo;
+            public AlphaPropertyInfo AlphaInfo;
         }
 
         public static Node Resolve(NIFBlock block, NIFReader nif)
@@ -37,7 +56,8 @@ namespace OpenFo3.NIF
                     var node = ParseNode(br, block.Index, block.Type, isGeometry: true);
                     if (node != null)
                     {
-                        node.TexturePath = ResolveTexturePath(node, nif);
+                        ResolveShaderProperty(node, nif);
+                        ResolveAlphaProperty(node, nif);
                     }
                     return node;
                 }
@@ -50,99 +70,283 @@ namespace OpenFo3.NIF
             return null;
         }
 
-        private static string ResolveTexturePath(Node node, NIFReader nif)
+        private static void ResolveShaderProperty(Node node, NIFReader nif)
         {
-            if (node.PropertyIndices.Count == 0) return null;
+            if (node.PropertyIndices.Count == 0) return;
 
             foreach (int propIdx in node.PropertyIndices)
             {
                 if (propIdx < 0 || propIdx >= nif.Blocks.Count) continue;
                 var propBlock = nif.Blocks[propIdx];
 
-                if (propBlock.Type == "BSShaderPPLightingProperty" || propBlock.Type == "BSShaderNoLightingProperty")
+                if (propBlock.Type == "BSShaderPPLightingProperty")
                 {
-                    try
-                    {
-                        using var ms = new MemoryStream(propBlock.Data);
-                        using var br = new BinaryReader(ms);
-
-                        // --- NiObjectNET fields ---
-                        br.ReadUInt32(); // Name index
-                        uint numExtra = br.ReadUInt32();
-                        for (int i = 0; i < numExtra; i++) br.ReadInt32();
-                        br.ReadInt32(); // Controller
-
-                        // --- BSShaderProperty fields (Fixed offset from dump) ---
-                        // Dump: FF-FF-FF-FF-00-00-00-00-FF-FF-FF-FF-01-00-01-00-00-00-01-01-00-82-01-00-00-00-00-00-80-3F-03-00-00-00-11-00-00-00
-                        br.ReadBytes(18); // Header/Flags adjustment
-                        
-                        uint shaderType = br.ReadUInt32();
-                        int textureSetRef = br.ReadInt32();
-
-                        if (textureSetRef != -1 && textureSetRef < nif.Blocks.Count)
-                        {
-                            var tsBlock = nif.Blocks[textureSetRef];
-                            if (tsBlock.Type == "BSShaderTextureSet")
-                            {
-                                using var msTS = new MemoryStream(tsBlock.Data);
-                                using var brTS = new BinaryReader(msTS);
-                                uint numTextures = brTS.ReadUInt32();
-                                if (numTextures > 0 && numTextures < 20)
-                                {
-                                    string texPath = ReadNifString(brTS);
-                                    if (!string.IsNullOrEmpty(texPath)) return texPath;
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        GD.PrintErr($"[NIFBlockResolver] Failed to parse shader property {propBlock.Type}: {ex.Message}");
-                    }
+                    ResolveBSShaderPPLightingProperty(propBlock.Data, node, nif);
+                }
+                else if (propBlock.Type == "BSShaderNoLightingProperty")
+                {
+                    ResolveBSShaderNoLightingProperty(propBlock.Data, node, nif);
                 }
                 else if (propBlock.Type == "NiTexturingProperty")
                 {
-                    try
-                    {
-                        using var ms = new MemoryStream(propBlock.Data);
-                        using var br = new BinaryReader(ms);
-                        
-                        br.ReadUInt32(); 
-                        uint numExtra = br.ReadUInt32();
-                        for (int i = 0; i < numExtra; i++) br.ReadInt32();
-                        br.ReadInt32(); 
+                    ResolveNiTexturingProperty(propBlock.Data, node, nif);
+                }
+                else if (propBlock.Type == "TileShaderProperty" || propBlock.Type == "TallGrassShaderProperty")
+                {
+                    ResolveSimpleShaderProperty(propBlock.Data, node);
+                }
 
-                        br.ReadUInt16(); // Flags
-                        br.ReadUInt16(); // ApplyMode
-                        ushort texCount = br.ReadUInt16(); 
-                        
-                        for (int i = 0; i < texCount; i++)
-                        {
-                            bool enabled = br.ReadByte() != 0;
-                            int texRef = br.ReadInt32();
-                            
-                            if (enabled && texRef != -1 && texRef < nif.Blocks.Count)
-                            {
-                                var srcBlock = nif.Blocks[texRef];
-                                if (srcBlock.Type == "NiSourceTexture")
-                                {
-                                    using var msST = new MemoryStream(srcBlock.Data);
-                                    using var brST = new BinaryReader(msST);
-                                    
-                                    brST.ReadUInt32(); uint stNumExtra = brST.ReadUInt32();
-                                    for(int j=0; j<stNumExtra; j++) brST.ReadInt32();
-                                    brST.ReadInt32();
-                                    
-                                    string path = ReadNifString(brST);
-                                    if (!string.IsNullOrEmpty(path)) return path;
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex) { GD.PrintErr($"[NIFBlockResolver] Failed to parse NiTexturingProperty: {ex.Message}"); }
+                if (node.ShaderInfo != null) break;
+            }
+        }
+
+        private static void ResolveAlphaProperty(Node node, NIFReader nif)
+        {
+            foreach (int propIdx in node.PropertyIndices)
+            {
+                if (propIdx < 0 || propIdx >= nif.Blocks.Count) continue;
+                var propBlock = nif.Blocks[propIdx];
+                if (propBlock.Type == "NiAlphaProperty" && propBlock.Data.Length >= 2)
+                {
+                    node.AlphaInfo = new AlphaPropertyInfo
+                    {
+                        Flags = BitConverter.ToUInt16(propBlock.Data, 0),
+                        Threshold = propBlock.Data.Length >= 3 ? propBlock.Data[2] : (byte)128
+                    };
+                    break;
                 }
             }
-            return null;
+        }
+
+        private static void ResolveBSShaderPPLightingProperty(byte[] data, Node node, NIFReader nif)
+        {
+            try
+            {
+                using var ms = new MemoryStream(data);
+                using var br = new BinaryReader(ms);
+
+                // NiObjectNET
+                uint nameIdx = br.ReadUInt32();
+                uint numExtra = br.ReadUInt32();
+                for (int i = 0; i < numExtra; i++) br.ReadInt32();
+                int controller = br.ReadInt32();
+
+                // NiShadeProperty
+                ushort shadeFlags = br.ReadUInt16();
+
+                // BSShaderProperty
+                uint shaderType = br.ReadUInt32();
+                uint shaderFlags = br.ReadUInt32();
+                uint shaderFlags2 = br.ReadUInt32();
+                float envMapScale = br.ReadSingle();
+
+                // BSShaderLightingProperty
+                uint texClampMode = br.ReadUInt32();
+
+                // BSShaderPPLightingProperty
+                int textureSetRef = br.ReadInt32();
+                float refractionStrength = br.ReadSingle();
+                int refractionFirePeriod = br.ReadInt32();
+                float parallaxMaxPasses = br.ReadSingle();
+                float parallaxScale = br.ReadSingle();
+
+                var info = new ShaderTextureInfo
+                {
+                    ShaderType = (int)shaderType,
+                    ShaderFlags = shaderFlags,
+                    ShaderFlags2 = shaderFlags2,
+                    EnvironmentMapScale = envMapScale,
+                    RefractionStrength = refractionStrength,
+                    ParallaxScale = parallaxScale,
+                    ParallaxMaxPasses = parallaxMaxPasses,
+                };
+
+                if (textureSetRef != -1 && textureSetRef < nif.Blocks.Count)
+                {
+                    var tsBlock = nif.Blocks[textureSetRef];
+                    if (tsBlock.Type == "BSShaderTextureSet")
+                    {
+                        info.TexturePaths = ReadTextureSet(tsBlock.Data);
+                    }
+                }
+
+                node.ShaderInfo = info;
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"[NIFBlockResolver] Failed to parse BSShaderPPLightingProperty: {ex.Message}");
+            }
+        }
+
+        private static void ResolveBSShaderNoLightingProperty(byte[] data, Node node, NIFReader nif)
+        {
+            try
+            {
+                using var ms = new MemoryStream(data);
+                using var br = new BinaryReader(ms);
+
+                // NiObjectNET
+                br.ReadUInt32();
+                uint numExtra = br.ReadUInt32();
+                for (int i = 0; i < numExtra; i++) br.ReadInt32();
+                br.ReadInt32();
+
+                // NiShadeProperty
+                br.ReadUInt16();
+
+                // BSShaderProperty
+                uint shaderType = br.ReadUInt32();
+                uint shaderFlags = br.ReadUInt32();
+                uint shaderFlags2 = br.ReadUInt32();
+                br.ReadSingle(); // envMapScale
+
+                // BSShaderLightingProperty
+                br.ReadUInt32(); // texClampMode
+
+                // BSShaderNoLightingProperty
+                string fileName = ReadNifString(br);
+
+                var info = new ShaderTextureInfo
+                {
+                    ShaderType = (int)shaderType,
+                    ShaderFlags = shaderFlags,
+                    ShaderFlags2 = shaderFlags2,
+                };
+
+                if (!string.IsNullOrEmpty(fileName))
+                    info.TexturePaths = new[] { fileName };
+
+                node.ShaderInfo = info;
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"[NIFBlockResolver] Failed to parse BSShaderNoLightingProperty: {ex.Message}");
+            }
+        }
+
+        private static void ResolveNiTexturingProperty(byte[] data, Node node, NIFReader nif)
+        {
+            try
+            {
+                using var ms = new MemoryStream(data);
+                using var br = new BinaryReader(ms);
+
+                br.ReadUInt32();
+                uint numExtra = br.ReadUInt32();
+                for (int i = 0; i < numExtra; i++) br.ReadInt32();
+                br.ReadInt32();
+
+                ushort flags = br.ReadUInt16();
+                ushort applyMode = br.ReadUInt16();
+                ushort texCount = br.ReadUInt16();
+
+                List<string> paths = new();
+                for (int i = 0; i < texCount; i++)
+                {
+                    bool enabled = br.ReadByte() != 0;
+                    int texRef = br.ReadInt32();
+
+                    if (enabled && texRef != -1 && texRef < nif.Blocks.Count)
+                    {
+                        var srcBlock = nif.Blocks[texRef];
+                        if (srcBlock.Type == "NiSourceTexture")
+                        {
+                            string path = ReadNiSourceTexturePath(srcBlock.Data);
+                            if (!string.IsNullOrEmpty(path))
+                                paths.Add(path);
+                        }
+                    }
+                }
+
+                if (paths.Count > 0)
+                {
+                    node.ShaderInfo = new ShaderTextureInfo
+                    {
+                        ShaderType = 1,
+                        TexturePaths = paths.ToArray(),
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                GD.PrintErr($"[NIFBlockResolver] Failed to parse NiTexturingProperty: {ex.Message}");
+            }
+        }
+
+        private static void ResolveSimpleShaderProperty(byte[] data, Node node)
+        {
+            try
+            {
+                using var ms = new MemoryStream(data);
+                using var br = new BinaryReader(ms);
+
+                br.ReadUInt32();
+                uint numExtra = br.ReadUInt32();
+                for (int i = 0; i < numExtra; i++) br.ReadInt32();
+                br.ReadInt32();
+                br.ReadUInt16();
+                br.ReadUInt32();
+                br.ReadUInt32();
+                br.ReadUInt32();
+                br.ReadSingle();
+                br.ReadUInt32();
+
+                string fileName = ReadNifString(br);
+                if (!string.IsNullOrEmpty(fileName))
+                {
+                    node.ShaderInfo = new ShaderTextureInfo
+                    {
+                        ShaderType = 1,
+                        TexturePaths = new[] { fileName },
+                    };
+                }
+            }
+            catch { }
+        }
+
+        private static string[] ReadTextureSet(byte[] data)
+        {
+            try
+            {
+                using var ms = new MemoryStream(data);
+                using var br = new BinaryReader(ms);
+                uint numTextures = br.ReadUInt32();
+                if (numTextures == 0 || numTextures > 20)
+                {
+                    // FO3 may store numTextures = 0 but still have 6 paths right after
+                    numTextures = 6;
+                }
+
+                List<string> paths = new();
+                for (int i = 0; i < numTextures; i++)
+                {
+                    string path = ReadNifString(br);
+                    paths.Add(path ?? "");
+                }
+                return paths.ToArray();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string ReadNiSourceTexturePath(byte[] data)
+        {
+            try
+            {
+                using var ms = new MemoryStream(data);
+                using var br = new BinaryReader(ms);
+                br.ReadUInt32();
+                uint numExtra = br.ReadUInt32();
+                for (int i = 0; i < numExtra; i++) br.ReadInt32();
+                br.ReadInt32();
+                return ReadNifString(br);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static string ReadNifString(BinaryReader br)
@@ -159,27 +363,17 @@ namespace OpenFo3.NIF
         {
             var node = new Node();
             long totalLen = br.BaseStream.Length;
-            bool dbg = (blockIdx == 0); // block 0 のみデバッグ出力
-
-            if (dbg) GD.Print($"[NIFBlockResolver] ParseNode block={blockIdx} ({blockType}) dataSize={totalLen} isGeom={isGeometry}");
 
             // 1. NiObjectNET fields
             uint nameIdx = br.ReadUInt32();
-            if (dbg) GD.Print($"  nameIdx={nameIdx} pos={br.BaseStream.Position}");
-
             uint numExtra = br.ReadUInt32();
-            if (dbg) GD.Print($"  numExtra={numExtra} pos={br.BaseStream.Position}");
             for (int i = 0; i < numExtra; i++) br.ReadInt32();
-
             int controllerRef = br.ReadInt32();
 
             // 2. NiAVObject fields
-            // FO3 20.2.0.7: flags は uint32 (4バイト)。PyFFI ground truth + binary remainder=0 で確定。
             uint flags = br.ReadUInt32();
-            if (dbg) GD.Print($"  flags={flags & 0xFFFF} (uint32={flags:X8}) pos={br.BaseStream.Position}");
 
             node.Translation = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-            if (dbg) GD.Print($"  Translation={node.Translation} pos={br.BaseStream.Position}");
 
             // Rotation Matrix (3x3, row-major)
             float m11 = br.ReadSingle(), m12 = br.ReadSingle(), m13 = br.ReadSingle();
@@ -192,11 +386,8 @@ namespace OpenFo3.NIF
             );
 
             node.Scale = br.ReadSingle();
-            if (dbg) GD.Print($"  Scale={node.Scale} pos={br.BaseStream.Position}");
 
             uint numProps = br.ReadUInt32();
-            if (dbg) GD.Print($"  numProps={numProps} pos={br.BaseStream.Position}");
-
             for (int i = 0; i < numProps; i++)
             {
                 int propIdx = br.ReadInt32();
@@ -204,8 +395,6 @@ namespace OpenFo3.NIF
             }
 
             int collisionObject = br.ReadInt32();
-            if (dbg) GD.Print($"  collisionRef={collisionObject} pos={br.BaseStream.Position}");
-
 
             // 3. NiNode or NiGeometry fields
             if (isGeometry)

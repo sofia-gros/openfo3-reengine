@@ -9,13 +9,14 @@ using System.Threading.Tasks;
 using OpenFo3.ESM;
 using OpenFo3.NIF;
 using OpenFo3.BSA;
+using OpenFo3.World;
 
 public partial class Megaton : Node3D
 {
 	private ConcurrentDictionary<string, ArrayMesh> _meshCache = new();
 	private ConcurrentDictionary<string, NIFReader> _nifCache = new();
 	private ConcurrentDictionary<string, Texture2D> _textureCache = new();
-	
+
 	private BSAReader _meshesBsa;
 	private BSAReader _texturesBsa;
 	private ESMReader _esm;
@@ -30,12 +31,17 @@ public partial class Megaton : Node3D
 
 	private ConcurrentQueue<InstanceRequest> _instantiateQueue = new();
 	private Vector2 _megatonCenter = new Vector2(-14200f, -3800f);
+	private uint _megatonWorldId;
+
+	private LightingLoader _lightingLoader;
+	private TerrainBuilder _terrainBuilder;
 
 	private struct InstanceRequest
 	{
 		public string Path;
 		public Vector3 Position;
 		public Vector3 Rotation;
+		public uint FormId;
 	}
 
 	public override void _Process(double delta)
@@ -70,11 +76,13 @@ public partial class Megaton : Node3D
 			{
 				"STAT", "DOOR", "FURN", "ACTI", "MSTT", "LIGH", "TERM",
 				"CONT", "MISC", "WEAP", "ARMO", "CLOT", "TREE", "ALCH", "INGR", "BOOK",
-				// "NPC_", "CREA",
 				"GRAS", "LAND", "DEBR", "SCOL"
 			});
 
 			_refrFormIDIndex = _esm.BuildFormIdIndex(new[] { "REFR" });
+
+			_lightingLoader = new LightingLoader(_esm);
+			_terrainBuilder = new TerrainBuilder(_esm);
 
 			uint megatonWorldId = 0;
 			var wrldIndex = _esm.BuildFormIdIndex(new[] { "WRLD" });
@@ -97,12 +105,66 @@ public partial class Megaton : Node3D
 
 			if (megatonWorldId != 0)
 			{
+				_megatonWorldId = megatonWorldId;
+
+				// Load terrain synchronously before async world load
+				LoadTerrain(megatonWorldId);
+
+				// Load cell lighting
+				LoadCellLighting(megatonWorldId);
+
 				_ = Task.Run(() => LoadWorldAsync(megatonWorldId));
 			}
 		}
 		catch (Exception e)
 		{
 			GD.PrintErr($"[Megaton] Init error: {e.Message}");
+		}
+	}
+
+	private void LoadTerrain(uint worldId)
+	{
+		try
+		{
+			var tiles = _terrainBuilder.BuildTerrainForWorld(worldId, _megatonCenter, LoadTexture);
+			GD.Print($"[Megaton] Loaded {tiles.Count} terrain tiles.");
+
+			foreach (var tile in tiles)
+			{
+				var inst = new MeshInstance3D();
+				inst.Mesh = tile.Mesh;
+				inst.Name = $"Terrain_{tile.CellCoord.X}_{tile.CellCoord.Y}";
+				AddChild(inst);
+			}
+		}
+		catch (Exception e)
+		{
+			GD.PrintErr($"[Megaton] Terrain load error: {e.Message}");
+		}
+	}
+
+	private void LoadCellLighting(uint worldId)
+	{
+		try
+		{
+			// Find the persistent cell for Megaton
+			var cellIndex = _esm.BuildFormIdIndex(new[] { "CELL" });
+			foreach (var kvp in cellIndex)
+			{
+				if (kvp.Value.WorldFormId != worldId) continue;
+
+				var lighting = _lightingLoader.GetCellLighting(kvp.Key);
+				if (lighting != null)
+				{
+					GD.Print($"[Megaton] Found lighting for CELL 0x{kvp.Key:X8}");
+					LightingLoader.ApplyCellLighting(this, lighting);
+					break;
+				}
+			}
+		}
+		catch (Exception e)
+		{
+			GD.PrintErr($"[Megaton] Lighting load error: {e.Message}");
 		}
 	}
 
@@ -176,6 +238,7 @@ public partial class Megaton : Node3D
 				Path = nifPath,
 				Position = new Vector3((px - _megatonCenter.X) * WorldScale, pz * WorldScale, -(py - _megatonCenter.Y) * WorldScale),
 				Rotation = new Vector3(rx, ry, rz),
+				FormId = formId,
 			});
 		}
 		catch (Exception e)
@@ -211,16 +274,56 @@ public partial class Megaton : Node3D
 		var inst = new MeshInstance3D { Mesh = mesh };
 
 		// FO3 Intrinsic ZYX == Extrinsic XYZ
-		// FO3 X → Godot  X  (Vector3.Right)
-		// FO3 Y → Godot -Z  (Vector3.Forward)  ※ Back(+Z) ではなく Forward(-Z)
-		// FO3 Z → Godot  Y  (Vector3.Up)
 		var basis = Basis.Identity;
-		basis = basis.Rotated(Vector3.Right,   req.Rotation.X); // ① X軸まわり
-		basis = basis.Rotated(Vector3.Forward, req.Rotation.Y); // ② FO3 Y → Godot -Z
-		basis = basis.Rotated(Vector3.Up,      req.Rotation.Z); // ③ FO3 Z → Godot Y
+		basis = basis.Rotated(Vector3.Right,   req.Rotation.X);
+		basis = basis.Rotated(Vector3.Forward, req.Rotation.Y);
+		basis = basis.Rotated(Vector3.Up,      req.Rotation.Z);
 
 		inst.Transform = new Transform3D(basis, req.Position);
 		AddChild(inst);
+
+		// Build collision if NIF has bhk blocks
+		if (_nifCache.TryGetValue(req.Path, out var nif))
+		{
+			NIFCollisionBuilder.BuildCollision(nif, inst);
+		}
+
+		// Create light if base object is LIGH
+		if (IsLightRef(req.FormId))
+		{
+			CreateLightForRef(req);
+		}
+	}
+
+	private bool IsLightRef(uint formId)
+	{
+		string baseType = GetBaseObjectType(formId);
+		return baseType == "LIGH";
+	}
+
+	private string GetBaseObjectType(uint formId)
+	{
+		if (_masterFormIDIndex.TryGetValue(formId, out var entry))
+		{
+			lock (_esm)
+			{
+				var rec = _esm.GetRecordAtOffset(entry.Offset);
+				return rec.Type;
+			}
+		}
+		return null;
+	}
+
+	private void CreateLightForRef(InstanceRequest req)
+	{
+		var lightData = _lightingLoader.ParseLight(req.FormId);
+		if (lightData == null) return;
+
+		var lightNode = LightingLoader.CreateLightNode(lightData, req.Position, req.Rotation);
+		if (lightNode != null)
+		{
+			AddChild(lightNode);
+		}
 	}
 
 	private ArrayMesh GetOrBuildMesh(string path)
@@ -235,23 +338,35 @@ public partial class Megaton : Node3D
 		var mesh = NIFMeshBuilder.BuildArrayMesh(geom);
 		if (mesh.GetSurfaceCount() > 0)
 		{
-			// Apply textures
 			for (int i = 0; i < mesh.GetSurfaceCount(); i++)
 			{
 				string texPath = mesh.SurfaceGetName(i);
-				GD.Print($"[Megaton] Surface {i} of {path} has TexturePath: '{texPath}'");
-				
-				if (!string.IsNullOrEmpty(texPath))
+
+				// Use the new material builder with full shader info
+				if (geom.Surfaces.Count > i)
+				{
+					var surface = geom.Surfaces[i];
+					var mat = NIFMaterialBuilder.BuildMaterial(surface.Shader, surface.Alpha, LoadTexture);
+
+					// Fallback: if no material was built, try simple texture
+					if (mat.AlbedoTexture == null && !string.IsNullOrEmpty(texPath))
+					{
+						var tex = LoadTexture(texPath);
+						if (tex != null)
+						{
+							mat.AlbedoTexture = tex;
+						}
+					}
+
+					mesh.SurfaceSetMaterial(i, mat);
+				}
+				else if (!string.IsNullOrEmpty(texPath))
 				{
 					var tex = LoadTexture(texPath);
 					if (tex != null)
 					{
 						var mat = new StandardMaterial3D { AlbedoTexture = tex };
 						mesh.SurfaceSetMaterial(i, mat);
-					}
-					else
-					{
-						GD.Print($"[Megaton] Texture NOT found/loaded: {texPath} for mesh {path}");
 					}
 				}
 			}
@@ -265,10 +380,10 @@ public partial class Megaton : Node3D
 
 	private Texture2D LoadTexture(string path)
 	{
+		if (string.IsNullOrEmpty(path)) return null;
+
 		path = path.Replace('\\', '/');
-		
-		// Some NIFs have "textures/" prefix, some don't. 
-		// Let's try matching both or normalization.
+
 		string searchPath = path;
 		if (!searchPath.StartsWith("textures/", StringComparison.OrdinalIgnoreCase))
 			searchPath = "textures/" + searchPath;
@@ -278,19 +393,14 @@ public partial class Megaton : Node3D
 		if (_texturesBsa == null) return null;
 
 		var file = _textureFiles.FirstOrDefault(f => f.Path.Equals(searchPath, StringComparison.OrdinalIgnoreCase));
-		
-		// If not found with "textures/", try without it just in case
+
 		if (file == null && searchPath.StartsWith("textures/", StringComparison.OrdinalIgnoreCase))
 		{
 			string altPath = searchPath.Substring(9);
 			file = _textureFiles.FirstOrDefault(f => f.Path.Equals(altPath, StringComparison.OrdinalIgnoreCase));
 		}
 
-		if (file == null)
-		{
-			// GD.PrintErr($"[Megaton] Texture file not in BSA: {searchPath}");
-			return null;
-		}
+		if (file == null) return null;
 
 		byte[] data = _texturesBsa.ReadFileData(file);
 		if (data == null) return null;
@@ -301,7 +411,6 @@ public partial class Megaton : Node3D
 		{
 			var tex = ImageTexture.CreateFromImage(img);
 			_textureCache.TryAdd(searchPath, tex);
-			GD.Print($"[Megaton] Successfully loaded texture: {searchPath}");
 			return tex;
 		}
 		else
