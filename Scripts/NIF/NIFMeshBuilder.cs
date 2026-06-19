@@ -72,19 +72,22 @@ namespace OpenFo3.NIF
                     godotVertices[i] = v * worldScale;
                 }
 
-                var arrays = new Godot.Collections.Array();
-                arrays.Resize((int)Mesh.ArrayType.Max);
-                arrays[(int)Mesh.ArrayType.Vertex] = godotVertices;
-                arrays[(int)Mesh.ArrayType.Index] = surface.Indices;
+                var st = new SurfaceTool();
+                st.Begin(Mesh.PrimitiveType.Triangles);
 
-                if (surface.UVs != null && surface.UVs.Length == surface.Vertices.Length)
+                for (int vi = 0; vi < godotVertices.Length; vi++)
                 {
-                    arrays[(int)Mesh.ArrayType.TexUV] = surface.UVs;
+                    if (surface.UVs != null && vi < surface.UVs.Length)
+                        st.SetUV(surface.UVs[vi]);
+                    st.AddVertex(godotVertices[vi]);
                 }
 
-                mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+                foreach (int idx in surface.Indices)
+                    st.AddIndex(idx);
 
-                // Store texture path in surface name
+                st.GenerateNormals();
+                st.GenerateTangents();
+                st.Commit(mesh);
                 int surfaceIdx = mesh.GetSurfaceCount() - 1;
                 if (!string.IsNullOrEmpty(surface.TexturePath))
                 {

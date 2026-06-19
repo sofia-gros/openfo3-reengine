@@ -58,7 +58,10 @@ namespace OpenFo3.World
 
                 var tile = BuildTerrainTile(landFormId, cellX, cellY, loadTexture, megatonCenter);
                 if (tile != null)
+                {
                     tiles.Add(tile);
+                    GD.Print($"[TerrainBuilder] Built tile for cell ({cellX}, {cellY})");
+                }
             }
 
             return tiles;

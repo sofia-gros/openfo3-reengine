@@ -16,7 +16,7 @@ namespace OpenFo3.NIF
         private const int SlotBackLighting = 7;
 
         public static StandardMaterial3D BuildMaterial(ShaderTextureInfo shader, AlphaPropertyInfo alpha,
-            Func<string, Texture2D> loadTexture)
+            Func<string, Texture2D> loadTexture, Func<string, bool> textureHasAlpha = null)
         {
             var mat = new StandardMaterial3D();
 
@@ -48,12 +48,22 @@ namespace OpenFo3.NIF
                     mat.AlphaScissorThreshold = alphaThreshold / 255f;
                 }
             }
+            else if ((shader.ShaderFlags & 0x00000100) != 0)
+            {
+                // No NiAlphaProperty, but ShaderFlags bit 8 (AlphaTexture) is set.
+                // Only enable alpha if the diffuse texture actually has transparent pixels.
+                bool diffuseHasAlpha = false;
+                if (textureHasAlpha != null && texPaths != null && texPaths.Length > SlotDiffuse && !string.IsNullOrEmpty(texPaths[SlotDiffuse]))
+                {
+                    diffuseHasAlpha = textureHasAlpha(texPaths[SlotDiffuse]);
+                }
 
-            // NiAlphaProperty is the authoritative source for alpha behavior.
-            // ShaderFlags bit 8 (AlphaTexture) does NOT necessarily mean alpha
-            // testing is needed — many FO3 textures store non-transparency data
-            // (gloss/roughness) in the alpha channel. Forcing alpha scissor here
-            // causes those meshes to become transparent from certain angles.
+                if (diffuseHasAlpha)
+                {
+                    mat.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
+                    mat.AlphaScissorThreshold = 0.5f;
+                }
+            }
 
             if ((shader.ShaderFlags2 & (1 << 5)) != 0)
             {
