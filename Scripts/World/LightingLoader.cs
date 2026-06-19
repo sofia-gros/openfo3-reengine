@@ -286,6 +286,14 @@ namespace OpenFo3.World
             float pz = -position.Y;
             light.Position = new Vector3(px, py, pz);
 
+            // Apply REFR rotation: same axis mapping as mesh instances
+            // FO3 RotZ -> Godot Up (-rz matches mesh convention), FO3 RotY -> Godot Forward, FO3 RotX -> Godot Right
+            var basis = Basis.Identity;
+            basis = basis.Rotated(Vector3.Up,     -rotation.Z);
+            basis = basis.Rotated(Vector3.Forward, rotation.Y);
+            basis = basis.Rotated(Vector3.Right,   rotation.X);
+            light.Transform = new Transform3D(basis, light.Position);
+
             return light;
         }
     }

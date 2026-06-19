@@ -18,12 +18,14 @@ namespace OpenFo3.World
         private ESMReader _esm;
         private Dictionary<uint, RecordEntry> _landIndex;
         private Dictionary<uint, RecordEntry> _ltexIndex;
+        private Dictionary<uint, RecordEntry> _cellIndex;
 
         public TerrainBuilder(ESMReader esm)
         {
             _esm = esm;
             _landIndex = esm.BuildFormIdIndex(new[] { "LAND" });
             _ltexIndex = esm.BuildFormIdIndex(new[] { "LTEX" });
+            _cellIndex = esm.BuildFormIdIndex(new[] { "CELL" });
         }
 
         public class TerrainTile
@@ -37,9 +39,7 @@ namespace OpenFo3.World
         {
             var tiles = new List<TerrainTile>();
 
-            // Find all CELL records with LAND
-            var cellIndex = _esm.BuildFormIdIndex(new[] { "CELL" });
-            var landCells = new List<uint>();
+                var landCells = new List<uint>();
 
             foreach (var kvp in _landIndex)
             {
@@ -53,13 +53,10 @@ namespace OpenFo3.World
 
             foreach (uint landFormId in landCells)
             {
-                var landEntry = _landIndex[landFormId];
-                var cellEntry = cellIndex.Values.FirstOrDefault(c => c.CellFormId == landFormId);
-
                 if (!TryGetCellCoord(landFormId, out int cellX, out int cellY))
                     continue;
 
-                var tile = BuildTerrainTile(landFormId, cellX, cellY, loadTexture);
+                var tile = BuildTerrainTile(landFormId, cellX, cellY, loadTexture, megatonCenter);
                 if (tile != null)
                     tiles.Add(tile);
             }
@@ -72,15 +69,16 @@ namespace OpenFo3.World
             cellX = 0; cellY = 0;
             try
             {
-                if (!_landIndex.TryGetValue(formId, out var entry)) return false;
+                // LAND formId == CELL formId in FO3. Read XCLC from the CELL record.
+                if (!_cellIndex.TryGetValue(formId, out var entry)) return false;
                 var record = _esm.GetRecordAtOffset(entry.Offset);
                 var subs = _esm.GetSubRecords(record);
 
-                var data = subs.FirstOrDefault(s => s.Type == "DATA");
-                if (data == null || data.Data.Length < 8) return false;
+                var xclc = subs.FirstOrDefault(s => s.Type == "XCLC");
+                if (xclc == null || xclc.Data.Length < 8) return false;
 
-                cellX = BitConverter.ToInt32(data.Data, 0);
-                cellY = BitConverter.ToInt32(data.Data, 4);
+                cellX = BitConverter.ToInt32(xclc.Data, 0);
+                cellY = BitConverter.ToInt32(xclc.Data, 4);
                 return true;
             }
             catch
@@ -90,7 +88,7 @@ namespace OpenFo3.World
         }
 
         private TerrainTile BuildTerrainTile(uint landFormId, int cellX, int cellY,
-            Func<string, Texture2D> loadTexture)
+            Func<string, Texture2D> loadTexture, Vector2 megatonCenter)
         {
             try
             {
@@ -114,7 +112,7 @@ namespace OpenFo3.World
 
                 if (vhgtData == null) return null;
 
-                // Parse height map
+                // Parse height map — VHGT: baseHeight + 33x33 signed bytes (continuous row-major deltas)
                 float baseHeight = BitConverter.ToSingle(vhgtData, 0);
                 float[,] heights = new float[GridSize, GridSize];
                 float currentHeight = baseHeight;
@@ -122,14 +120,15 @@ namespace OpenFo3.World
                 int offset = 4;
                 for (int row = 0; row < GridSize; row++)
                 {
-                    currentHeight = baseHeight;
                     for (int col = 0; col < GridSize; col++)
                     {
-                        if (offset < vhgtData.Length)
+                        if (row > 0 || col > 0)
                         {
-                            float delta = vhgtData[offset] / 8f;
-                            currentHeight += delta;
-                            offset++;
+                            if (offset < vhgtData.Length)
+                            {
+                                currentHeight += vhgtData[offset] / 8f;
+                                offset++;
+                            }
                         }
                         heights[row, col] = currentHeight;
                     }
@@ -175,7 +174,7 @@ namespace OpenFo3.World
                 }
 
                 // Build mesh
-                return BuildTerrainMesh(heights, normals, colors, cellX, cellY, landFormId);
+                return BuildTerrainMesh(heights, normals, colors, cellX, cellY, landFormId, megatonCenter);
             }
             catch (Exception e)
             {
@@ -185,7 +184,7 @@ namespace OpenFo3.World
         }
 
         private TerrainTile BuildTerrainMesh(float[,] heights, Vector3[,] normals, Color[,] colors,
-            int cellX, int cellY, uint landFormId)
+            int cellX, int cellY, uint landFormId, Vector2 megatonCenter)
         {
             int quadsPerSide = GridSize - 1;
             int totalVerts = GridSize * GridSize;
@@ -208,10 +207,10 @@ namespace OpenFo3.World
                     int idx = row * GridSize + col;
 
                     // FO3 coords: X=col, Y=row, Z=height
-                    // Convert to Godot: (X, Z, -Y)
-                    float godotX = (originX + col * (CellSize / quadsPerSide)) * WorldScale;
+                    // Convert to Godot: (X, Z, -Y) offset by megatonCenter (same as REFR)
+                    float godotX = (originX + col * (CellSize / quadsPerSide) - megatonCenter.X) * WorldScale;
                     float godotY = heights[row, col] * HeightScale;
-                    float godotZ = -(originY + row * (CellSize / quadsPerSide)) * WorldScale;
+                    float godotZ = -(originY + row * (CellSize / quadsPerSide) - megatonCenter.Y) * WorldScale;
 
                     verts[idx] = new Vector3(godotX, godotY, godotZ);
 

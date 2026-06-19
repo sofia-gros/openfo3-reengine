@@ -101,15 +101,16 @@ namespace OpenFo3.NIF
                             int v0 = strip[i], v1 = strip[i + 1], v2 = strip[i + 2];
                             if (v0 == v1 || v1 == v2 || v0 == v2) continue;
                             if (v0 >= numVertices || v1 >= numVertices || v2 >= numVertices) continue;
-                            // Standard strip decomposition: even uses forward order, odd uses reversed order.
-                            // FO3 NIFs store CCW triangles (same convention as Godot), so no flip is needed.
+                            // Standard strip decomposition: even forward, odd reversed (swap first two).
+                            // FO3 NIFs store CW triangles (DirectX convention). Godot expects CCW,
+                            // so we must flip: swap v1 and v2 in the output.
                             if (i % 2 == 0)
                             {
-                                indicesList.Add(v0); indicesList.Add(v1); indicesList.Add(v2);
+                                indicesList.Add(v0); indicesList.Add(v2); indicesList.Add(v1);
                             }
                             else
                             {
-                                indicesList.Add(v0); indicesList.Add(v2); indicesList.Add(v1);
+                                indicesList.Add(v0); indicesList.Add(v1); indicesList.Add(v2);
                             }
                         }
                     }
@@ -183,9 +184,10 @@ namespace OpenFo3.NIF
                         ushort idx0 = br.ReadUInt16();
                         ushort idx1 = br.ReadUInt16();
                         ushort idx2 = br.ReadUInt16();
+                        // FO3 stores CW triangles, Godot needs CCW — flip by swapping idx1 and idx2
                         indices[i]     = (idx0 < numVertices) ? idx0 : 0;
-                        indices[i + 1] = (idx1 < numVertices) ? idx1 : 0;
-                        indices[i + 2] = (idx2 < numVertices) ? idx2 : 0;
+                        indices[i + 1] = (idx2 < numVertices) ? idx2 : 0;
+                        indices[i + 2] = (idx1 < numVertices) ? idx1 : 0;
                     }
                     return (vertices, uvs, indices);
                 }
