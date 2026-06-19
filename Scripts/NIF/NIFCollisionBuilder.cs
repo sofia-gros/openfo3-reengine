@@ -286,13 +286,36 @@ namespace OpenFo3.NIF
 
         private static void BuildConvexVerticesShape(byte[] data, StaticBody3D body, List<CollisionShape3D> shapes)
         {
-            // Fall back to a simple box shape
-            var shape = new CollisionShape3D();
-            var box = new BoxShape3D();
-            box.Size = new Vector3(0.5f, 0.5f, 0.5f);
-            shape.Shape = box;
-            body.AddChild(shape);
-            shapes.Add(shape);
+            try
+            {
+                using var br = new BinaryReader(new MemoryStream(data));
+
+                // bhkWorldObjCInfoProperty for vertices (12 bytes: Data + Size + CapacityAndFlags)
+                br.ReadBytes(12);
+                // bhkWorldObjCInfoProperty for normals (12 bytes)
+                br.ReadBytes(12);
+
+                uint numVerts = br.ReadUInt32();
+                if (numVerts == 0 || numVerts > 10000) return;
+
+                Vector3[] verts = new Vector3[numVerts];
+                for (int i = 0; i < numVerts; i++)
+                {
+                    float x = br.ReadSingle();
+                    float y = br.ReadSingle();
+                    float z = br.ReadSingle();
+                    br.ReadSingle(); // w = 0 (Vector4 padding)
+                    verts[i] = new Vector3(x * WorldScale, z * WorldScale, -y * WorldScale);
+                }
+
+                var shape = new CollisionShape3D();
+                var hull = new ConvexPolygonShape3D();
+                hull.SetPoints(verts);
+                shape.Shape = hull;
+                body.AddChild(shape);
+                shapes.Add(shape);
+            }
+            catch { }
         }
 
         private static void BuildMoppShape(NIFReader nif, NIFBlock block, StaticBody3D body, List<CollisionShape3D> shapes)
@@ -454,13 +477,54 @@ namespace OpenFo3.NIF
 
         private static void BuildNiTriStripsShape(NIFReader nif, NIFBlock block, StaticBody3D body, List<CollisionShape3D> shapes)
         {
-            // Fall back to a simple shape
-            var shape = new CollisionShape3D();
-            var box = new BoxShape3D();
-            box.Size = new Vector3(1, 1, 1);
-            shape.Shape = box;
-            body.AddChild(shape);
-            shapes.Add(shape);
+            try
+            {
+                using var ms = new MemoryStream(block.Data);
+                using var br = new BinaryReader(ms);
+
+                br.ReadUInt32(); // Material (HavokMaterial)
+                br.ReadSingle(); // Radius
+                br.ReadBytes(20); // Unused
+                br.ReadUInt32(); // Grow By
+                br.ReadBytes(16); // Scale (Vector4)
+
+                uint numStripsData = br.ReadUInt32();
+                int[] stripDataRefs = new int[numStripsData];
+                for (int i = 0; i < numStripsData; i++)
+                    stripDataRefs[i] = br.ReadInt32();
+
+                var allVerts = new List<Vector3>();
+                var allIndices = new List<int>();
+
+                foreach (int refIdx in stripDataRefs)
+                {
+                    if (refIdx < 0 || refIdx >= nif.Blocks.Count) continue;
+                    var dataBlock = nif.Blocks[refIdx];
+                    if (dataBlock.Type != "NiTriStripsData") continue;
+
+                    (Vector3[] verts, _, int[] inds) = NiTriStripsDataParser.Parse(dataBlock.Data);
+                    if (verts == null || verts.Length == 0 || inds == null || inds.Length < 3) continue;
+
+                    int baseIdx = allVerts.Count;
+                    foreach (var v in verts)
+                        allVerts.Add(new Vector3(v.X * WorldScale, v.Z * WorldScale, -v.Y * WorldScale));
+                    foreach (int idx in inds)
+                        allIndices.Add(baseIdx + idx);
+                }
+
+                if (allVerts.Count < 3 || allIndices.Count < 3) return;
+
+                var shape = new CollisionShape3D();
+                var trimesh = new ConcavePolygonShape3D();
+                Vector3[] faces = new Vector3[allIndices.Count];
+                for (int i = 0; i < allIndices.Count; i++)
+                    faces[i] = allVerts[allIndices[i]];
+                trimesh.SetFaces(faces);
+                shape.Shape = trimesh;
+                body.AddChild(shape);
+                shapes.Add(shape);
+            }
+            catch { }
         }
 
         private static void BuildTransformShape(NIFReader nif, NIFBlock block, StaticBody3D body, List<CollisionShape3D> shapes)

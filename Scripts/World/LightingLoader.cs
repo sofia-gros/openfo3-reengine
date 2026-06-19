@@ -119,6 +119,23 @@ namespace OpenFo3.World
             }
         }
 
+        private static CellLightingData GetDefaultCellLighting()
+        {
+            return new CellLightingData
+            {
+                AmbientColor = new Color(0.1f, 0.1f, 0.12f),
+                DirectionalColor = new Color(1f, 1f, 1f),
+                FogColor = new Color(0.2f, 0.2f, 0.22f),
+                FogNear = 0f,
+                FogFar = 10000f,
+                DirectionalRotationXY = 0f,
+                DirectionalRotationZ = 0f,
+                DirectionalFade = 0f,
+                FogClipDistance = 10000f,
+                FogPower = 1f,
+            };
+        }
+
         private CellLightingData GetTemplateLighting(uint templateId, uint inheritFlags)
         {
             if (!_lgtmIndex.TryGetValue(templateId, out var entry)) return null;
@@ -131,14 +148,26 @@ namespace OpenFo3.World
                 if (dataSub == null || dataSub.Data.Length < 40) return null;
 
                 var template = ParseXCLL(dataSub.Data);
+                if (template == null) return null;
 
-                // Apply inheritance: only fields where inherit flag bit is set
-                if (inheritFlags != 0xFFFFFFFF && template != null)
-                {
-                    // (In a full implementation, we'd merge with defaults)
-                }
+                // When inheritFlags == 0xFFFFFFFF, inherit all fields (template used as-is)
+                if (inheritFlags == 0xFFFFFFFF) return template;
 
-                return template;
+                // Otherwise, merge: only inherit fields whose flag bit is set;
+                // use defaults for fields not inherited.
+                var result = GetDefaultCellLighting();
+
+                if ((inheritFlags & 0x00000001) != 0) result.AmbientColor = template.AmbientColor;
+                if ((inheritFlags & 0x00000002) != 0) result.DirectionalColor = template.DirectionalColor;
+                if ((inheritFlags & 0x00000004) != 0) result.FogColor = template.FogColor;
+                if ((inheritFlags & 0x00000008) != 0) result.FogNear = template.FogNear;
+                if ((inheritFlags & 0x00000010) != 0) result.FogFar = template.FogFar;
+                if ((inheritFlags & 0x00000020) != 0) { result.DirectionalRotationXY = template.DirectionalRotationXY; result.DirectionalRotationZ = template.DirectionalRotationZ; }
+                if ((inheritFlags & 0x00000040) != 0) result.DirectionalFade = template.DirectionalFade;
+                if ((inheritFlags & 0x00000080) != 0) result.FogClipDistance = template.FogClipDistance;
+                if ((inheritFlags & 0x00000100) != 0) result.FogPower = template.FogPower;
+
+                return result;
             }
             catch
             {

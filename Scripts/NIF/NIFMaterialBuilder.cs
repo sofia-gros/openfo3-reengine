@@ -49,12 +49,11 @@ namespace OpenFo3.NIF
                 }
             }
 
-            // Check shader flags for alpha
-            if ((shader.ShaderFlags & (1 << 8)) != 0 && !hasAlphaBlend && !hasAlphaTest)
-            {
-                mat.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
-                mat.AlphaScissorThreshold = 0.5f;
-            }
+            // NiAlphaProperty is the authoritative source for alpha behavior.
+            // ShaderFlags bit 8 (AlphaTexture) does NOT necessarily mean alpha
+            // testing is needed — many FO3 textures store non-transparency data
+            // (gloss/roughness) in the alpha channel. Forcing alpha scissor here
+            // causes those meshes to become transparent from certain angles.
 
             if ((shader.ShaderFlags2 & (1 << 5)) != 0)
             {

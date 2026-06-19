@@ -96,21 +96,20 @@ namespace OpenFo3.NIF
                         ushort[] strip = new ushort[length];
                         for (int i = 0; i < length; i++) strip[i] = br.ReadUInt16();
 
-                        // Triangle-strip fan. Godot uses CCW front-face, but the
-                        // original strip uses the opposite convention, so we flip
-                        // the winding by swapping v1/v2 on even indices.
                         for (int i = 0; i < length - 2; i++)
                         {
                             int v0 = strip[i], v1 = strip[i + 1], v2 = strip[i + 2];
-                            if (v0 == v1 || v1 == v2 || v0 == v2) continue;        // degenerate
-                            if (v0 >= numVertices || v1 >= numVertices || v2 >= numVertices) continue; // OOB guard
+                            if (v0 == v1 || v1 == v2 || v0 == v2) continue;
+                            if (v0 >= numVertices || v1 >= numVertices || v2 >= numVertices) continue;
+                            // Standard strip decomposition: even uses forward order, odd uses reversed order.
+                            // FO3 NIFs store CCW triangles (same convention as Godot), so no flip is needed.
                             if (i % 2 == 0)
                             {
-                                indicesList.Add(v0); indicesList.Add(v2); indicesList.Add(v1);
+                                indicesList.Add(v0); indicesList.Add(v1); indicesList.Add(v2);
                             }
                             else
                             {
-                                indicesList.Add(v0); indicesList.Add(v1); indicesList.Add(v2);
+                                indicesList.Add(v0); indicesList.Add(v2); indicesList.Add(v1);
                             }
                         }
                     }
@@ -185,8 +184,8 @@ namespace OpenFo3.NIF
                         ushort idx1 = br.ReadUInt16();
                         ushort idx2 = br.ReadUInt16();
                         indices[i]     = (idx0 < numVertices) ? idx0 : 0;
-                        indices[i + 1] = (idx2 < numVertices) ? idx2 : 0;
-                        indices[i + 2] = (idx1 < numVertices) ? idx1 : 0;
+                        indices[i + 1] = (idx1 < numVertices) ? idx1 : 0;
+                        indices[i + 2] = (idx2 < numVertices) ? idx2 : 0;
                     }
                     return (vertices, uvs, indices);
                 }

@@ -273,11 +273,13 @@ public partial class Megaton : Node3D
 
 		var inst = new MeshInstance3D { Mesh = mesh };
 
-		// FO3 Intrinsic ZYX == Extrinsic XYZ
+		// FO3 Intrinsic ZYX -> Godot: build Rx * Ry * Rz (rightmost = first = Z)
+		// Axis mapping: FO3 X->Godot X(Right), FO3 Y->Godot -Z(Forward), FO3 Z->Godot Y(Up)
+		// Negate rz because Rot(Up, +rz) rotates opposite to FO3's RotZ convention
 		var basis = Basis.Identity;
-		basis = basis.Rotated(Vector3.Right,   req.Rotation.X);
-		basis = basis.Rotated(Vector3.Forward, req.Rotation.Y);
-		basis = basis.Rotated(Vector3.Up,      req.Rotation.Z);
+		basis = basis.Rotated(Vector3.Up,      -req.Rotation.Z); // FO3 RotZ -> Godot -Yaw
+		basis = basis.Rotated(Vector3.Forward,  req.Rotation.Y); // FO3 RotY -> Godot Roll
+		basis = basis.Rotated(Vector3.Right,    req.Rotation.X); // FO3 RotX -> Godot Pitch
 
 		inst.Transform = new Transform3D(basis, req.Position);
 		AddChild(inst);
