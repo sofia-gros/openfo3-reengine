@@ -215,17 +215,22 @@ namespace OpenFo3.World
             ambient.LightEnergy = 0.3f;
             root.AddChild(ambient);
 
-            // Set directional light
-            var dir = new DirectionalLight3D();
-            dir.Name = "CellDirectionalLight";
-            dir.LightColor = lighting.DirectionalColor;
-            dir.LightEnergy = 1.0f;
+			// Set directional light (sun) with shadow mapping
+			var dir = new DirectionalLight3D();
+			dir.Name = "CellDirectionalLight";
+			dir.LightColor = lighting.DirectionalColor;
+			dir.LightEnergy = 1.0f;
+			dir.ShadowEnabled = true;
+			dir.ShadowBias = 0.001f;
+			dir.ShadowNormalBias = 0.01f;
+			dir.DirectionalShadowMaxDistance = 200f;
+			dir.DirectionalShadowBlendSplits = true;
 
-            // Convert FO3 directional rotation to Godot orientation
-            float xyRad = Mathf.DegToRad(lighting.DirectionalRotationXY);
-            float zRad = Mathf.DegToRad(lighting.DirectionalRotationZ);
-            dir.Rotation = new Vector3(zRad, xyRad, 0);
-            root.AddChild(dir);
+			// Convert FO3 directional rotation to Godot orientation
+			float xyRad = Mathf.DegToRad(lighting.DirectionalRotationXY);
+			float zRad = Mathf.DegToRad(lighting.DirectionalRotationZ);
+			dir.Rotation = new Vector3(zRad, xyRad, 0);
+			root.AddChild(dir);
 
             // Apply fog via WorldEnvironment
             var existingEnv = root.GetNodeOrNull<WorldEnvironment>("WorldEnvironment");
@@ -269,8 +274,12 @@ namespace OpenFo3.World
                 light = new OmniLight3D();
             }
 
-            light.Name = $"Light_{lightData.FormId:X8}";
-            light.LightColor = lightData.Color;
+			light.Name = $"Light_{lightData.FormId:X8}";
+			light.LightColor = lightData.Color;
+			light.LightEnergy = 1.0f;
+			light.ShadowEnabled = true;
+			light.ShadowBias = 0.005f;
+			light.ShadowNormalBias = 0.02f;
 
             // FO3 falloff exponent affects light attenuation.
             float fo3Falloff = lightData.FalloffExponent > 0 ? lightData.FalloffExponent : 1.0f;
