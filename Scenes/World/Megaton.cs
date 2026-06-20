@@ -42,6 +42,7 @@ public partial class Megaton : Node3D
 		public Vector3 Position;
 		public Vector3 Rotation;
 		public uint FormId;
+		public string BaseType;
 	}
 
 	public override void _Process(double delta)
@@ -134,7 +135,18 @@ public partial class Megaton : Node3D
 							seCellX = BitConverter.ToInt16(mnam.Data, 12);
 							seCellY = BitConverter.ToInt16(mnam.Data, 14);
 						}
-						GD.Print($"[Megaton] MegatonWorld bounds: NW=({nwCellX},{nwCellY}) SE=({seCellX},{seCellY})");
+
+						// Ensure minimum terrain coverage: at least 20x20 cells centered on (0,0)
+						const int minHalf = 10;
+						int centerX = (nwCellX + seCellX) / 2;
+						int centerY = (nwCellY + seCellY) / 2;
+						int halfExtX = Math.Max((seCellX - nwCellX) / 2, minHalf) + 5;
+						int halfExtY = Math.Max((seCellY - nwCellY) / 2, minHalf) + 5;
+						nwCellX = centerX - halfExtX;
+						nwCellY = centerY - halfExtY;
+						seCellX = centerX + halfExtX;
+						seCellY = centerY + halfExtY;
+						GD.Print($"[Megaton] MegatonWorld bounds (expanded): NW=({nwCellX},{nwCellY}) SE=({seCellX},{seCellY})");
 
 						break;
 					}
@@ -262,37 +274,47 @@ public partial class Megaton : Node3D
 			uint formId = BitConverter.ToUInt32(nameSub.Data, 0);
 
 			RecordEntry baseEntry;
-			string nifPath;
+			string nifPath = null;
+			string baseType = null;
 
 			lock (_esm)
 			{
 				if (!_masterFormIDIndex.TryGetValue(formId, out baseEntry)) return;
 				var baseRecord = _esm.GetRecordAtOffset(baseEntry.Offset);
+				baseType = baseRecord.Type;
 				var baseSubs = _esm.GetSubRecords(baseRecord);
 				var modl = baseSubs.FirstOrDefault(s => s.Type == "MODL");
-				if (modl == null) return;
-				nifPath = Encoding.ASCII.GetString(modl.Data).TrimEnd('\0').Replace('\\', '/');
+				if (modl != null)
+				{
+					nifPath = Encoding.ASCII.GetString(modl.Data).TrimEnd('\0').Replace('\\', '/');
+				}
 			}
 
-			if (!nifPath.StartsWith("meshes/", StringComparison.OrdinalIgnoreCase)) nifPath = "meshes/" + nifPath;
+			// Light-only objects (no mesh) still need a light node created
+			if (nifPath == null && baseType != "LIGH") return;
 
-			// Skip editor/debug markers (root-level Marker*.nif) and effect/light/shadow helpers
-			string nifLower = nifPath.ToLowerInvariant();
-			string fname = System.IO.Path.GetFileName(nifLower);
-			bool isDebug =
-				nifLower.StartsWith("meshes/marker") ||           // meshes/MarkerX.nif, Marker_Map.nif etc.
-				nifLower.Contains("editormarker") ||              // meshes/.../EditorMarker.nif
-				fname.Contains("shadow") ||                       // Shadow volume meshes
-				fname.StartsWith("cone") ||                       // Cone-shaped debug helpers
-				(nifLower.Contains("/effects/") && fname.StartsWith("fxlight")); // FXLightBeam*.NIF
-
-			if (isDebug)
+			if (nifPath != null)
 			{
-				GD.Print($"[Megaton] Skipping debug marker: {nifPath}");
-				return;
-			}
+				if (!nifPath.StartsWith("meshes/", StringComparison.OrdinalIgnoreCase))
+					nifPath = "meshes/" + nifPath;
 
-			EnsureNifParsed(nifPath);
+				string nifLower = nifPath.ToLowerInvariant();
+				string fname = System.IO.Path.GetFileName(nifLower);
+				bool isDebug =
+					nifLower.StartsWith("meshes/marker") ||
+					nifLower.Contains("editormarker") ||
+					fname.Contains("shadow") ||
+					fname.StartsWith("cone") ||
+					(nifLower.Contains("/effects/") && fname.StartsWith("fxlight"));
+
+				if (isDebug)
+				{
+					GD.Print($"[Megaton] Skipping debug marker: {nifPath}");
+					return;
+				}
+
+				EnsureNifParsed(nifPath);
+			}
 
 			float px = BitConverter.ToSingle(dataSub.Data, 0);
 			float py = BitConverter.ToSingle(dataSub.Data, 4);
@@ -307,6 +329,7 @@ public partial class Megaton : Node3D
 				Position = new Vector3((px - _megatonCenter.X) * WorldScale, pz * WorldScale, -(py - _megatonCenter.Y) * WorldScale),
 				Rotation = new Vector3(rx, ry, rz),
 				FormId = formId,
+				BaseType = baseType,
 			});
 		}
 		catch (Exception e)
@@ -336,51 +359,36 @@ public partial class Megaton : Node3D
 
 	private void CreateAndAddInstance(InstanceRequest req)
 	{
-		var mesh = GetOrBuildMesh(req.Path);
-		if (mesh == null) return;
+		MeshInstance3D inst = null;
 
-		var inst = new MeshInstance3D { Mesh = mesh };
-
-		// FO3 Intrinsic ZYX -> Godot: build R_Right(rx) * R_Forward(ry) * R_Up(rz)
-		// Axis mapping: FO3 X->Godot X(Right), FO3 Y->Godot -Z(Forward), FO3 Z->Godot Y(Up)
-		var basis = Basis.Identity;
-		basis = basis.Rotated(Vector3.Up,      -req.Rotation.Z); // FO3 RotZ -> Godot Yaw
-		basis = basis.Rotated(Vector3.Forward,  req.Rotation.Y); // FO3 RotY -> Godot Roll
-		basis = basis.Rotated(Vector3.Right,    req.Rotation.X); // FO3 RotX -> Godot Pitch
-
-		inst.Transform = new Transform3D(basis, req.Position);
-		AddChild(inst);
-
-		// Build collision if NIF has bhk blocks
-		if (_nifCache.TryGetValue(req.Path, out var nif))
+		if (!string.IsNullOrEmpty(req.Path))
 		{
-			NIFCollisionBuilder.BuildCollision(nif, inst);
+			var mesh = GetOrBuildMesh(req.Path);
+			if (mesh == null && req.BaseType != "LIGH") return;
+
+			if (mesh != null)
+			{
+				inst = new MeshInstance3D { Mesh = mesh };
+
+				var basis = Basis.Identity;
+				basis = basis.Rotated(Vector3.Up,      -req.Rotation.Z);
+				basis = basis.Rotated(Vector3.Forward,  req.Rotation.Y);
+				basis = basis.Rotated(Vector3.Right,    req.Rotation.X);
+
+				inst.Transform = new Transform3D(basis, req.Position);
+				AddChild(inst);
+
+				if (_nifCache.TryGetValue(req.Path, out var nif))
+				{
+					NIFCollisionBuilder.BuildCollision(nif, inst);
+				}
+			}
 		}
 
-		// Create light if base object is LIGH
-		if (IsLightRef(req.FormId))
+		if (req.BaseType == "LIGH")
 		{
 			CreateLightForRef(req);
 		}
-	}
-
-	private bool IsLightRef(uint formId)
-	{
-		string baseType = GetBaseObjectType(formId);
-		return baseType == "LIGH";
-	}
-
-	private string GetBaseObjectType(uint formId)
-	{
-		if (_masterFormIDIndex.TryGetValue(formId, out var entry))
-		{
-			lock (_esm)
-			{
-				var rec = _esm.GetRecordAtOffset(entry.Offset);
-				return rec.Type;
-			}
-		}
-		return null;
 	}
 
 	private void CreateLightForRef(InstanceRequest req)
