@@ -312,7 +312,7 @@ namespace OpenFo3.World
                 // - The leftmost column (col=0) is cumulative vertically from south to north.
                 // - Each row is cumulative horizontally from west to east starting from col=0.
                 // Each delta step represents a factor of 8.0 game units.
-                float baseHeight = BitConverter.ToSingle(vhgtData, 0);
+                float baseHeight = BitConverter.ToSingle(vhgtData, 0) * 8f;
                 float[,] heights = new float[GridSize, GridSize];
                 
                 sbyte[,] deltas = new sbyte[GridSize, GridSize];
