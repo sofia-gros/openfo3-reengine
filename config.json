@@ -1,0 +1,25 @@
+{
+  "Fallout3Root": "A:\\SteamLibrary\\steamapps\\common\\Fallout 3 goty",
+  "DataPath": "",
+  "EsmPath": "",
+
+  "BSA": {
+    "Meshes": "Fallout - Meshes.bsa",
+    "Textures": "Fallout - Textures.bsa",
+    "Misc": "Fallout - Misc.bsa",
+    "Voices": "Fallout - Voices.bsa"
+  },
+
+  "World": {
+    "TargetWorld": "MegatonWorld",
+    "CenterX": -14200.0,
+    "CenterY": -3800.0
+  },
+
+  "Rendering": {
+    "WorldScale": 0.015,
+    "ShadowAtlasSize": 4096,
+    "DirectionalShadowSize": 4096,
+    "SoftShadowQuality": 1
+  }
+}

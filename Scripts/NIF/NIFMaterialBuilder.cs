@@ -78,6 +78,15 @@ namespace OpenFo3.NIF
                 case ShaderTypeParallaxOccInner:
                     BuildMultiLayerParallax(mat, shader, texPaths, loadTexture);
                     break;
+                case ShaderTypeWing:
+                    BuildWing(mat, shader, texPaths, loadTexture);
+                    break;
+                case ShaderTypeSnowShader:
+                    BuildSnowShader(mat, shader, texPaths, loadTexture);
+                    break;
+                case ShaderTypeZBufferWrite:
+                    BuildZBufferWrite(mat, shader, texPaths, loadTexture);
+                    break;
                 case ShaderTypeHeightmap:
                     BuildHeightmap(mat, shader, texPaths, loadTexture);
                     break;
@@ -86,6 +95,8 @@ namespace OpenFo3.NIF
                     break;
             }
 
+            ApplyHeightmap(mat, shader, texPaths, loadTexture);
+            ApplyDetail(mat, texPaths, loadTexture);
             ApplyRefraction(mat, shader);
             return mat;
         }
@@ -123,8 +134,8 @@ namespace OpenFo3.NIF
             }
         }
 
-        private static void ApplyCommonTextures(StandardMaterial3D mat, string[] texPaths,
-            Func<string, Texture2D> loadTexture)
+        private static void ApplyCommonTextures(StandardMaterial3D mat, ShaderTextureInfo shader,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
         {
             if (texPaths == null) return;
 
@@ -139,11 +150,14 @@ namespace OpenFo3.NIF
 
             if ((shader.ShaderFlags & 0x00000001) != 0)
             {
-                var tex = loadTexture(texPaths[SlotEnvironmentMask]);
-                if (tex != null)
+                if (texPaths.Length > SlotEnvironmentMask && !string.IsNullOrEmpty(texPaths[SlotEnvironmentMask]))
                 {
-                    mat.RoughnessTexture = tex;
-                    mat.RoughnessTextureChannel = BaseMaterial3D.TextureChannel.Red;
+                    var tex = loadTexture(texPaths[SlotEnvironmentMask]);
+                    if (tex != null)
+                    {
+                        mat.RoughnessTexture = tex;
+                        mat.RoughnessTextureChannel = BaseMaterial3D.TextureChannel.Red;
+                    }
                 }
             }
         }
@@ -156,11 +170,8 @@ namespace OpenFo3.NIF
 
             if ((shader.ShaderFlags & 0x00000001) != 0)
                 mat.SpecularMode = BaseMaterial3D.SpecularModeEnum.SchlickGgx;
-            }
             else
-            {
                 mat.SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled;
-            }
 
             // Rough metallic surfaces (e.g., rusted metal)
             if ((shader.ShaderFlags & (1 << 7)) != 0)
@@ -169,8 +180,67 @@ namespace OpenFo3.NIF
                 mat.Roughness = 0.5f;
             }
 
-            // ---- Diffuse / Albedo (Slot 0) ----
-            if (texPaths != null && texPaths.Length > SlotDiffuse && !string.IsNullOrEmpty(texPaths[SlotDiffuse]))
+            ApplyCommonTextures(mat, shader, texPaths, loadTexture);
+
+            // ---- Normal Map (Slot 1) ----
+            if (texPaths != null && texPaths.Length > SlotNormalGloss && !string.IsNullOrEmpty(texPaths[SlotNormalGloss]))
+            {
+                var tex = loadTexture(texPaths[SlotNormalGloss]);
+                if (tex != null)
+                {
+                    mat.NormalTexture = tex;
+                    mat.NormalEnabled = true;
+                }
+            }
+
+            // ---- Emissive / Glow (Slot 2) ----
+            if (texPaths != null && texPaths.Length > SlotGlowSkinHair && !string.IsNullOrEmpty(texPaths[SlotGlowSkinHair]))
+            {
+                var tex = loadTexture(texPaths[SlotGlowSkinHair]);
+                if (tex != null)
+                {
+                    mat.EmissionTexture = tex;
+                    mat.EmissionEnabled = true;
+                    mat.Emission = new Color(1f, 1f, 1f);
+                }
+            }
+
+            // ---- Roughness from Environment Mask (Slot 5) ----
+            if (texPaths != null && texPaths.Length > SlotEnvironmentMask && !string.IsNullOrEmpty(texPaths[SlotEnvironmentMask]))
+            {
+                var tex = loadTexture(texPaths[SlotEnvironmentMask]);
+                if (tex != null)
+                {
+                    mat.RoughnessTexture = tex;
+                    mat.RoughnessTextureChannel = BaseMaterial3D.TextureChannel.Red;
+                }
+            }
+        }
+
+        private static void BuildGlowShader(StandardMaterial3D mat, ShaderTextureInfo shader,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
+        {
+            mat.DisableAmbientLight = true;
+            mat.SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled;
+            mat.Roughness = 0.8f;
+            mat.Metallic = 0.0f;
+
+            if (texPaths == null) return;
+
+            if (texPaths.Length > SlotDiffuse && !string.IsNullOrEmpty(texPaths[SlotDiffuse]))
+            {
+                var tex = loadTexture(texPaths[SlotDiffuse]);
+                if (tex != null)
+                {
+                    mat.AlbedoTexture = tex;
+                    mat.EmissionTexture = tex;
+                    mat.EmissionEnabled = true;
+                    mat.Emission = new Color(1f, 1f, 1f);
+                }
+            }
+
+            // Override emission with Glow map (Slot 2) if present
+            if (texPaths.Length > SlotGlowSkinHair && !string.IsNullOrEmpty(texPaths[SlotGlowSkinHair]))
             {
                 var tex = loadTexture(texPaths[SlotGlowSkinHair]);
                 if (tex != null)
@@ -198,7 +268,7 @@ namespace OpenFo3.NIF
             }
 
             // ---- Normal Map (Slot 1) ----
-            if (texPaths != null && texPaths.Length > SlotNormalGloss && !string.IsNullOrEmpty(texPaths[SlotNormalGloss]))
+            if (texPaths.Length > SlotNormalGloss && !string.IsNullOrEmpty(texPaths[SlotNormalGloss]))
             {
                 var tex = loadTexture(texPaths[SlotNormalGloss]);
                 if (tex != null)
@@ -209,9 +279,7 @@ namespace OpenFo3.NIF
             }
 
             // ---- Roughness from Environment Mask (Slot 5) ----
-            // FO3 stores specular intensity / gloss in the environment mask (Slot 5).
-            // We use its red channel as a roughness map.
-            if (texPaths != null && texPaths.Length > SlotEnvironmentMask && !string.IsNullOrEmpty(texPaths[SlotEnvironmentMask]))
+            if (texPaths.Length > SlotEnvironmentMask && !string.IsNullOrEmpty(texPaths[SlotEnvironmentMask]))
             {
                 var tex = loadTexture(texPaths[SlotEnvironmentMask]);
                 if (tex != null)
@@ -222,7 +290,7 @@ namespace OpenFo3.NIF
             }
 
             // ---- Environment Map (Slot 4) ----
-            if (texPaths != null && texPaths.Length > SlotEnvironment && !string.IsNullOrEmpty(texPaths[SlotEnvironment]))
+            if (texPaths.Length > SlotEnvironment && !string.IsNullOrEmpty(texPaths[SlotEnvironment]))
             {
                 var tex = loadTexture(texPaths[SlotEnvironment]);
                 if (tex != null)
@@ -233,7 +301,7 @@ namespace OpenFo3.NIF
             }
 
             // ---- Emissive / Glow (Slot 2) ----
-            if (texPaths != null && texPaths.Length > SlotGlowSkinHair && !string.IsNullOrEmpty(texPaths[SlotGlowSkinHair]))
+            if (texPaths.Length > SlotGlowSkinHair && !string.IsNullOrEmpty(texPaths[SlotGlowSkinHair]))
             {
                 var tex = loadTexture(texPaths[SlotGlowSkinHair]);
                 if (tex != null)
@@ -245,33 +313,204 @@ namespace OpenFo3.NIF
             }
         }
 
-            // ---- Heightmap / Parallax (Slot 3) ----
-            if (texPaths != null && texPaths.Length > SlotHeightParallax && !string.IsNullOrEmpty(texPaths[SlotHeightParallax]))
+        private static void BuildSkinTint(StandardMaterial3D mat, ShaderTextureInfo shader,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
+        {
+            mat.VertexColorUseAsAlbedo = true;
+            mat.Roughness = 0.5f;
+            mat.Metallic = 0.0f;
+            mat.SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled;
+
+            mat.SubsurfScatterEnabled = true;
+            mat.SubsurfScatterStrength = 0.3f;
+            mat.SubsurfScatterSkinMode = true;
+            mat.SubsurfScatterTransmittanceEnabled = true;
+
+            ApplyCommonTextures(mat, shader, texPaths, loadTexture);
+
+            // Approximate transmittance color from Slot 2 (Glow/Skin) top-left pixel
+            if (texPaths != null && texPaths.Length > SlotGlowSkinHair && !string.IsNullOrEmpty(texPaths[SlotGlowSkinHair]))
             {
-                var tex = loadTexture(texPaths[SlotHeightParallax]);
+                var tex = loadTexture(texPaths[SlotGlowSkinHair]);
                 if (tex != null)
                 {
-                    mat.HeightmapTexture = tex;
-                    mat.HeightmapEnabled = true;
-                    mat.HeightmapScale = shader.ParallaxScale > 0 ? shader.ParallaxScale : 0.05f;
-                    mat.HeightmapMaxLayers = Mathf.Max(1, (int)shader.ParallaxMaxPasses);
+                    var img = tex.GetImage();
+                    if (img != null)
+                    {
+                        var sample = img.GetPixel(0, 0);
+                        mat.SubsurfScatterTransmittanceColor = sample;
+                    }
                 }
             }
         }
 
-            // ---- Detail Map (Slot 6) ----
-            if (texPaths != null && texPaths.Length > SlotSubsurface && !string.IsNullOrEmpty(texPaths[SlotSubsurface]))
+        private static void BuildHairTint(StandardMaterial3D mat, ShaderTextureInfo shader,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
+        {
+            mat.VertexColorUseAsAlbedo = true;
+            mat.Roughness = 0.7f;
+            mat.Metallic = 0.0f;
+            mat.SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled;
+
+            ApplyCommonTextures(mat, shader, texPaths, loadTexture);
+        }
+
+        private static void BuildTallGrass(StandardMaterial3D mat, ShaderTextureInfo shader,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
+        {
+            mat.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
+            mat.AlphaScissorThreshold = 0.3f;
+            mat.Roughness = 0.9f;
+            mat.Metallic = 0.0f;
+            mat.SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled;
+
+            ApplyCommonTextures(mat, shader, texPaths, loadTexture);
+        }
+
+        private static void BuildMultiLayerParallax(StandardMaterial3D mat, ShaderTextureInfo shader,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
+        {
+            BuildDefault(mat, shader, texPaths, loadTexture);
+
+            // Heightmap and detail are applied after dispatch via ApplyHeightmap / ApplyDetail
+        }
+
+        private static void BuildHeightmap(StandardMaterial3D mat, ShaderTextureInfo shader,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
+        {
+            BuildDefault(mat, shader, texPaths, loadTexture);
+
+            // Heightmap is applied after dispatch via ApplyHeightmap
+        }
+
+        private static void BuildWing(StandardMaterial3D mat, ShaderTextureInfo shader,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
+        {
+            mat.Roughness = 0.6f;
+            mat.Metallic = 0.0f;
+            mat.SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled;
+            mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+            mat.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+
+            ApplyCommonTextures(mat, shader, texPaths, loadTexture);
+
+            if (texPaths == null) return;
+
+            if (texPaths.Length > SlotDiffuse && !string.IsNullOrEmpty(texPaths[SlotDiffuse]))
             {
-                var tex = loadTexture(texPaths[SlotSubsurface]);
+                var tex = loadTexture(texPaths[SlotDiffuse]);
+                if (tex != null) mat.AlbedoTexture = tex;
+            }
+
+            if (texPaths.Length > SlotNormalGloss && !string.IsNullOrEmpty(texPaths[SlotNormalGloss]))
+            {
+                var tex = loadTexture(texPaths[SlotNormalGloss]);
                 if (tex != null)
                 {
-                    mat.DetailAlbedo = tex;
-                    mat.DetailEnabled = true;
+                    mat.NormalTexture = tex;
+                    mat.NormalEnabled = true;
                 }
             }
         }
 
-            // ---- Refraction ----
+        private static void BuildSnowShader(StandardMaterial3D mat, ShaderTextureInfo shader,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
+        {
+            // Snow shader: bright, slightly metallic surface representing frost/snow accumulation.
+            // Uses default textures with a brighter albedo tint and higher roughness.
+            mat.Roughness = 0.8f;
+            mat.Metallic = 0.0f;
+            mat.SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled;
+
+            ApplyCommonTextures(mat, shader, texPaths, loadTexture);
+
+            if (texPaths == null) return;
+
+            if (texPaths.Length > SlotDiffuse && !string.IsNullOrEmpty(texPaths[SlotDiffuse]))
+            {
+                var tex = loadTexture(texPaths[SlotDiffuse]);
+                if (tex != null)
+                {
+                    mat.AlbedoTexture = tex;
+                    mat.AlbedoColor = new Color(1.3f, 1.3f, 1.35f);
+                }
+            }
+
+            if (texPaths.Length > SlotNormalGloss && !string.IsNullOrEmpty(texPaths[SlotNormalGloss]))
+            {
+                var tex = loadTexture(texPaths[SlotNormalGloss]);
+                if (tex != null)
+                {
+                    mat.NormalTexture = tex;
+                    mat.NormalEnabled = true;
+                }
+            }
+        }
+
+        private static void BuildZBufferWrite(StandardMaterial3D mat, ShaderTextureInfo shader,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
+        {
+            // ZBufferWrite shader: used for meshes that need special depth write behavior.
+            // For now, render as a standard opaque material with depth draw enabled.
+            mat.Roughness = 0.6f;
+            mat.Metallic = 0.0f;
+
+            if ((shader.ShaderFlags & 0x00000001) != 0)
+                mat.SpecularMode = BaseMaterial3D.SpecularModeEnum.SchlickGgx;
+            else
+                mat.SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled;
+
+            ApplyCommonTextures(mat, shader, texPaths, loadTexture);
+
+            if (texPaths == null) return;
+
+            if (texPaths.Length > SlotDiffuse && !string.IsNullOrEmpty(texPaths[SlotDiffuse]))
+            {
+                var tex = loadTexture(texPaths[SlotDiffuse]);
+                if (tex != null) mat.AlbedoTexture = tex;
+            }
+
+            if (texPaths.Length > SlotNormalGloss && !string.IsNullOrEmpty(texPaths[SlotNormalGloss]))
+            {
+                var tex = loadTexture(texPaths[SlotNormalGloss]);
+                if (tex != null)
+                {
+                    mat.NormalTexture = tex;
+                    mat.NormalEnabled = true;
+                }
+            }
+        }
+
+        private static void ApplyHeightmap(StandardMaterial3D mat, ShaderTextureInfo shader,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
+        {
+            if (texPaths == null || texPaths.Length <= SlotHeightParallax) return;
+            if (string.IsNullOrEmpty(texPaths[SlotHeightParallax])) return;
+
+            var tex = loadTexture(texPaths[SlotHeightParallax]);
+            if (tex == null) return;
+
+            mat.HeightmapTexture = tex;
+            mat.HeightmapEnabled = true;
+            mat.HeightmapScale = shader.ParallaxScale > 0 ? shader.ParallaxScale : 0.05f;
+            mat.HeightmapMaxLayers = Mathf.Max(1, (int)shader.ParallaxMaxPasses);
+        }
+
+        private static void ApplyDetail(StandardMaterial3D mat,
+            string[] texPaths, Func<string, Texture2D> loadTexture)
+        {
+            if (texPaths == null || texPaths.Length <= SlotSubsurface) return;
+            if (string.IsNullOrEmpty(texPaths[SlotSubsurface])) return;
+
+            var tex = loadTexture(texPaths[SlotSubsurface]);
+            if (tex == null) return;
+
+            mat.DetailAlbedo = tex;
+            mat.DetailEnabled = true;
+        }
+
+        private static void ApplyRefraction(StandardMaterial3D mat, ShaderTextureInfo shader)
+        {
             if ((shader.ShaderFlags & (1 << 15)) != 0 || (shader.ShaderFlags & (1 << 16)) != 0)
             {
                 mat.RefractionEnabled = true;

@@ -6,7 +6,8 @@ namespace OpenFo3.NIF
 {
     public class NIFGeometryData
     {
-        public List<(Vector3[] Vertices, Vector2[] UVs, int[] Indices, Transform3D Transform, string TexturePath, ShaderTextureInfo Shader, AlphaPropertyInfo Alpha)> Surfaces = new();
+        public List<(Vector3[] Vertices, Vector2[] UVs, int[] Indices, Transform3D Transform, string TexturePath, ShaderTextureInfo Shader, AlphaPropertyInfo Alpha, Color[] VertexColors)> Surfaces = new();
+        public SkinDataStore SkinData;
     }
 
     public static class NIFMeshBuilder
@@ -17,6 +18,7 @@ namespace OpenFo3.NIF
         public static NIFGeometryData ExtractGeometry(NIFReader nif)
         {
             var geom = new NIFGeometryData();
+            geom.SkinData = nif.SkinData;
             if (nif.Blocks.Count == 0) return geom;
 
             foreach (int rootIdx in nif.RootBlockIndices)
@@ -79,6 +81,8 @@ namespace OpenFo3.NIF
                 {
                     if (surface.UVs != null && vi < surface.UVs.Length)
                         st.SetUV(surface.UVs[vi]);
+                    if (surface.VertexColors != null && vi < surface.VertexColors.Length)
+                        st.SetColor(surface.VertexColors[vi]);
                     st.AddVertex(godotVertices[vi]);
                 }
 
@@ -125,31 +129,32 @@ namespace OpenFo3.NIF
             localTransform.Basis = localTransform.Basis.Scaled(new Vector3(node.Scale, node.Scale, node.Scale));
             var globalTransform = parentTransform * localTransform;
 
-            if (node.DataIndex != -1)
-            {
-                if (node.DataIndex >= 0 && node.DataIndex < nif.Blocks.Count)
+                if (node.DataIndex != -1)
                 {
-                    var dataBlock = nif.Blocks[node.DataIndex];
-                    Vector3[] verts = null;
-                    Vector2[] uvs = null;
-                    int[] inds = null;
+                    if (node.DataIndex >= 0 && node.DataIndex < nif.Blocks.Count)
+                    {
+                        var dataBlock = nif.Blocks[node.DataIndex];
+                        Vector3[] verts = null;
+                        Vector2[] uvs = null;
+                        int[] inds = null;
+                        Color[] vcols = null;
 
-                    if (dataBlock.Type == "NiTriStripsData")
-                    {
-                        (verts, uvs, inds) = NiTriStripsDataParser.Parse(dataBlock.Data);
-                    }
-                    else if (dataBlock.Type == "NiTriShapeData")
-                    {
-                        (verts, uvs, inds) = NiTriShapeDataParser.Parse(dataBlock.Data);
-                    }
+                        if (dataBlock.Type == "NiTriStripsData")
+                        {
+                            (verts, uvs, inds, vcols) = NiTriStripsDataParser.Parse(dataBlock.Data);
+                        }
+                        else if (dataBlock.Type == "NiTriShapeData")
+                        {
+                            (verts, uvs, inds, vcols) = NiTriShapeDataParser.Parse(dataBlock.Data);
+                        }
 
-                    if (verts != null && inds != null && inds.Length >= 3)
-                    {
-                        string texPath = node.ShaderInfo?.TexturePaths != null && node.ShaderInfo.TexturePaths.Length > 0 ? node.ShaderInfo.TexturePaths[0] : null;
-                        geom.Surfaces.Add((verts, uvs, inds, globalTransform, texPath, node.ShaderInfo, node.AlphaInfo));
+                        if (verts != null && inds != null && inds.Length >= 3)
+                        {
+                            string texPath = node.ShaderInfo?.TexturePaths != null && node.ShaderInfo.TexturePaths.Length > 0 ? node.ShaderInfo.TexturePaths[0] : null;
+                            geom.Surfaces.Add((verts, uvs, inds, globalTransform, texPath, node.ShaderInfo, node.AlphaInfo, vcols));
+                        }
                     }
                 }
-            }
 
             foreach (int childIdx in node.Children)
             {

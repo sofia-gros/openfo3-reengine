@@ -502,7 +502,7 @@ namespace OpenFo3.NIF
                     var dataBlock = nif.Blocks[refIdx];
                     if (dataBlock.Type != "NiTriStripsData") continue;
 
-                    (Vector3[] verts, _, int[] inds) = NiTriStripsDataParser.Parse(dataBlock.Data);
+                    (Vector3[] verts, _, int[] inds, _) = NiTriStripsDataParser.Parse(dataBlock.Data);
                     if (verts == null || verts.Length == 0 || inds == null || inds.Length < 3) continue;
 
                     int baseIdx = allVerts.Count;

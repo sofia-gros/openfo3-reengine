@@ -35,6 +35,7 @@ namespace OpenFo3.NIF
             public float Scale;
             public List<int> Children = new();
             public int DataIndex = -1;
+            public int SkinInstanceIndex = -1;
             public List<int> PropertyIndices = new();
             public ShaderTextureInfo ShaderInfo;
             public AlphaPropertyInfo AlphaInfo;
@@ -47,9 +48,13 @@ namespace OpenFo3.NIF
                 using var ms = new MemoryStream(block.Data);
                 using var br = new BinaryReader(ms);
 
-                if (block.Type == "NiNode" || block.Type == "BSFadeNode" || block.Type == "BSLeafAnimNode" || block.Type == "BSLODNode")
+                if (block.Type == "NiNode" || block.Type == "BSFadeNode" || block.Type == "BSLeafAnimNode" || block.Type == "BSLODNode" || block.Type == "NiBillboardNode" || block.Type == "NiSortAdjustNode" || block.Type == "NiSwitchNode" || block.Type == "BSValueNode" || block.Type == "BSOrderedNode" || block.Type == "BSRangeNode" || block.Type == "BSMultiBoundNode" || block.Type == "BSTreeNode" || block.Type == "NiBone" || block.Type == "RoomMarker" || block.Type == "NiRoomGroup" || block.Type == "BSMasterParticleSystem" || block.Type == "BSRefractionFireGlow" || block.Type == "NiAmbientLight" || block.Type == "NiDirectionalLight" || block.Type == "NiSpotLight" || block.Type == "NiPointLight")
                 {
                     return ParseNode(br, block.Index, block.Type);
+                }
+                else if (block.Type == "BSStripParticleSystem")
+                {
+                    return ParseNode(br, block.Index, block.Type, readNodeChildren: false);
                 }
                 else if (block.Type == "NiTriShape" || block.Type == "NiTriStrips")
                 {
@@ -359,7 +364,7 @@ namespace OpenFo3.NIF
             return Encoding.ASCII.GetString(bytes).TrimEnd('\0');
         }
 
-        private static Node ParseNode(BinaryReader br, int blockIdx, string blockType, bool isGeometry = false)
+        private static Node ParseNode(BinaryReader br, int blockIdx, string blockType, bool isGeometry = false, bool readNodeChildren = true)
         {
             var node = new Node();
             long totalLen = br.BaseStream.Length;
@@ -401,7 +406,7 @@ namespace OpenFo3.NIF
             {
                 node.DataIndex = br.ReadInt32();
 
-                br.ReadInt32(); // Skin Instance Ref
+                node.SkinInstanceIndex = br.ReadInt32(); // Skin Instance Ref
 
                 uint numMaterials = br.ReadUInt32();
                 for (int i = 0; i < numMaterials; i++) br.ReadInt32();
@@ -410,7 +415,7 @@ namespace OpenFo3.NIF
                 br.ReadUInt32(); // Active Material
                 br.ReadByte();   // Material Needs Update
             }
-            else
+            else if (readNodeChildren)
             {
                 uint numChildren = br.ReadUInt32();
                 for (int i = 0; i < numChildren; i++)

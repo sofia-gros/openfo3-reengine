@@ -12,6 +12,8 @@ namespace OpenFo3.BSA
         private Stream _stream;
         private readonly object _lock = new();
 
+        public string FilePath { get; private set; }
+
         public class Header
         {
             public uint FileID;
@@ -29,6 +31,7 @@ namespace OpenFo3.BSA
 
         public BSAReader(string filePath)
         {
+            FilePath = filePath;
             _stream = File.OpenRead(filePath);
             _reader = new BinaryReader(_stream);
             ReadHeader();
@@ -208,9 +211,8 @@ namespace OpenFo3.BSA
                         return _reader.ReadBytes((int)rawSize);
                     }
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
-                    // GD.PrintErr($"[BSAReader] FAILED ReadFileData for {file.Path}: {e.Message}");
                     return null;
                 }
             }

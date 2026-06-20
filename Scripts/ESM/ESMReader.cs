@@ -142,7 +142,7 @@ namespace OpenFo3.ESM
                         FileOffset = _stream.Position
                     };
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
                     throw;
                 }
@@ -162,7 +162,7 @@ namespace OpenFo3.ESM
                     _stream.Position = currentPos;
                     return data;
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
                     throw;
                 }

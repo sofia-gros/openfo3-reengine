@@ -454,7 +454,11 @@ namespace OpenFo3.World
                         cols[idx] = new Color(1f - t, 0.2f, t);
                     }
 
-                    uvs[idx] = new Vector2(col / (float)quadsPerSide, row / (float)quadsPerSide);
+                    // FO3 terrain textures tile every 256 FO3 units.
+                    // Cell is 4096 units, giving 4096/256 = 16 repeats per tile.
+                    const float textureTileUnits = 256f;
+                    float tileRepeats = CellSize / textureTileUnits;
+                    uvs[idx] = new Vector2(col / (float)quadsPerSide * tileRepeats, row / (float)quadsPerSide * tileRepeats);
                 }
             }
 

@@ -11,6 +11,7 @@ namespace OpenFo3.NIF
         public List<NIFBlock> Blocks = new List<NIFBlock>();
         public List<int> RootBlockIndices = new List<int>();
         public List<string> Strings = new List<string>();
+        public SkinDataStore SkinData = new SkinDataStore();
 
         public void Parse(byte[] data)
         {
@@ -98,10 +99,43 @@ namespace OpenFo3.NIF
 
                 // If no groups found, default to block 0
                 if (RootBlockIndices.Count == 0 && numBlocks > 0) RootBlockIndices.Add(0);
+
+                // Parse skinning blocks
+                ParseSkinningBlocks();
             }
             catch (Exception e)
             {
                 GD.PrintErr($"[NIFReader] Parse error: {e.Message}");
+            }
+        }
+
+        private void ParseSkinningBlocks()
+        {
+            for (int i = 0; i < Blocks.Count; i++)
+            {
+                var block = Blocks[i];
+                try
+                {
+                    if (block.Type == "NiSkinInstance" || block.Type == "BSDismemberSkinInstance")
+                    {
+                        var info = NIFSkinningParser.ParseSkinInstance(block.Data);
+                        SkinData.SkinInstances[i] = info;
+                    }
+                    else if (block.Type == "NiSkinData")
+                    {
+                        var info = NIFSkinningParser.ParseSkinData(block.Data);
+                        SkinData.SkinDatas[i] = info;
+                    }
+                    else if (block.Type == "NiSkinPartition")
+                    {
+                        var info = NIFSkinningParser.ParseSkinPartition(block.Data);
+                        SkinData.SkinPartitions[i] = info;
+                    }
+                }
+                catch (Exception e)
+                {
+                    GD.PrintErr($"[NIFReader] Error parsing skinning block {i} ({block.Type}): {e.Message}");
+                }
             }
         }
 

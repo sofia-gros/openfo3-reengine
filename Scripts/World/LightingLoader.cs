@@ -208,12 +208,9 @@ namespace OpenFo3.World
         {
             if (lighting == null) return;
 
-            // Set ambient light
-            var ambient = new DirectionalLight3D();
-            ambient.Name = "CellAmbientLight";
-            ambient.LightColor = lighting.AmbientColor;
-            ambient.LightEnergy = 0.3f;
-            root.AddChild(ambient);
+            // Ambient light is applied via the WorldEnvironment's AmbientLightColor below.
+            // We no longer create a separate DirectionalLight3D for ambient to avoid
+            // doubling the ambient contribution.
 
 			// Set directional light (sun) with shadow mapping
 			var dir = new DirectionalLight3D();
@@ -223,8 +220,11 @@ namespace OpenFo3.World
 			dir.ShadowEnabled = true;
 			dir.ShadowBias = 0.001f;
 			dir.ShadowNormalBias = 0.01f;
-			dir.DirectionalShadowMaxDistance = 200f;
+			dir.DirectionalShadowMaxDistance = 300f;
 			dir.DirectionalShadowBlendSplits = true;
+			dir.DirectionalShadowSplit1 = 0.05f;
+			dir.DirectionalShadowSplit2 = 0.15f;
+			dir.DirectionalShadowSplit3 = 0.4f;
 
 			// Convert FO3 directional rotation to Godot orientation
 			float xyRad = Mathf.DegToRad(lighting.DirectionalRotationXY);
