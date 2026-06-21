@@ -126,9 +126,37 @@ namespace OpenFo3.World
                 }
             }
 
-            // Build a reliable LAND→coordinate map by scanning the WRLD's children in order
+            // Build LAND→coordinate map by scanning the WRLD's children in order.
+            // Uses cellIndex to resolve coordinates inside Cell Children GRUPs.
             var landCoords = _esm.BuildLandCoordinateMap(_landIndex, _cellIndex, worldFormId);
-            GD.Print($"[TerrainBuilder] Found {landCells.Count} LAND records, {landCoords.Count} have cell coords");
+            GD.Print($"[TerrainBuilder] Found {landCells.Count} LAND records in world, {landCoords.Count} have cell coords");
+
+            // Cross-check: compare BuildLandCoordinateMap results against direct XCLC parsing
+            foreach (uint landFormId in landCells)
+            {
+                if (!_landIndex.TryGetValue(landFormId, out var landEntry)) continue;
+                if (!landCoords.TryGetValue(landFormId, out var coord)) continue;
+
+                int simpleX = 0, simpleY = 0;
+                bool simpleOk = false;
+                if (_cellIndex.TryGetValue(landEntry.CellFormId, out var cellEntry))
+                {
+                    var cellRec = _esm.GetRecordAtOffset(cellEntry.Offset);
+                    var cellSubs = _esm.GetSubRecords(cellRec);
+                    var xclc = cellSubs.FirstOrDefault(s => s.Type == "XCLC");
+                    if (xclc != null && xclc.Data.Length >= 8)
+                    {
+                        simpleX = BitConverter.ToInt32(xclc.Data, 0);
+                        simpleY = BitConverter.ToInt32(xclc.Data, 4);
+                        simpleOk = true;
+                    }
+                }
+
+                bool mismatch = simpleOk && (simpleX != coord.Item1 || simpleY != coord.Item2);
+                GD.Print($"[CrossCheck] LAND 0x{landFormId:X8}: mapCoord=({coord.Item1},{coord.Item2}) " +
+                    $"cellFormId=0x{landEntry.CellFormId:X8} simpleXCLC={(simpleOk ? $"({simpleX},{simpleY})" : "N/A(not in cellIndex)")}" +
+                    (mismatch ? "  *** MISMATCH ***" : ""));
+            }
 
             foreach (uint landFormId in landCells)
             {
@@ -266,6 +294,10 @@ namespace OpenFo3.World
             {
                 if (!_landIndex.TryGetValue(landFormId, out var entry)) return null;
                 var record = _esm.GetRecordAtOffset(entry.Offset);
+                if (record.Type != "LAND")
+                {
+                    GD.Print($"[TerrainBuilder] WARNING: LAND 0x{landFormId:X8} record type is '{record.Type}' not 'LAND' (offset=0x{entry.Offset:X8})");
+                }
                 var subs = _esm.GetSubRecords(record);
 
                 byte[] vhgtData = null, vnmlData = null, vclrData = null;
@@ -284,9 +316,33 @@ namespace OpenFo3.World
 
                 if (vhgtData == null) return null;
 
-                // Parse BTXT (base textures) and resolve texture paths
+                // Debug: print all subrecord types and raw data for comparison
+                if (landFormId == 0x0000395F || landFormId == 0x00014B70)
+                {
+                    var allTypes = subs.Select(s => s.Type).Distinct().ToList();
+                    GD.Print($"[LAND] LAND 0x{landFormId:X8} cell({cellX},{cellY}) subrecords: {string.Join(",", allTypes)}");
+                    string rawHex = BitConverter.ToString(vhgtData, 0, Math.Min(32, vhgtData.Length));
+                    GD.Print($"[LAND] VHGT raw[{vhgtData.Length}]: {rawHex}");
+                    var dataSub = subs.FirstOrDefault(s => s.Type == "DATA");
+                    if (dataSub != null)
+                        GD.Print($"[LAND] DATA raw[{dataSub.Data.Length}]: {BitConverter.ToString(dataSub.Data)}");
+                }
+
+                // Check for BTXT base texture subrecords
+                var btxtures = subs.Where(s => s.Type == "BTXT").ToArray();
+
+                // No BTXT at all → this LAND is unused/placeholder.
+                // Skip it entirely; the caller already marks the cell as covered,
+                // so no flat-fill tile is created either.
+                if (btxtures.Length == 0)
+                {
+                    GD.Print($"[TerrainBuilder] LAND 0x{landFormId:X8} cell({cellX},{cellY}) has no BTXT — skipping");
+                    return null;
+                }
+
+                // Resolve texture paths from BTXT
                 string terrainTexPath = null;
-                foreach (var v in subs.Where(s => s.Type == "BTXT"))
+                foreach (var v in btxtures)
                 {
                     if (v.Data.Length < 8) continue;
                     uint texFormId = BitConverter.ToUInt32(v.Data, 0);

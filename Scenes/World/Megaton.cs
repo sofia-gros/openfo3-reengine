@@ -401,6 +401,10 @@ public partial class Megaton : Node3D
 				{
 					defaultLandHeight = BitConverter.ToSingle(dnam.Data, 0);
 				}
+				if (dnam != null && name == "MegatonWorld")
+				{
+					GD.Print($"[WRLD] MegatonWorld DNAM data[{dnam.Data.Length}]: {BitConverter.ToString(dnam.Data)}");
+				}
 
 				int nwX = 0, nwY = 0, seX = 0, seY = 0;
 				bool hasMnam = false;

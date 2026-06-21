@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Collections.Generic;
 using Godot;
@@ -226,12 +227,19 @@ namespace OpenFo3.ESM
         /// Build a map from LAND formId → (cellX, cellY) by sequentially scanning the
         /// target WRLD's children in file order. This ensures each LAND gets the coordinates
         /// of the CELL that immediately precedes it in the tree.
+        private int _cellSeenInWorld;
+        private int _landSeenInWorld;
+
         public Dictionary<uint, (int, int)> BuildLandCoordinateMap(
             Dictionary<uint, RecordEntry> landIndex,
             Dictionary<uint, RecordEntry> cellIndex,
             uint worldFormId)
         {
             var coordMap = new Dictionary<uint, (int, int)>();
+            _cellSeenInWorld = 0;
+            _landSeenInWorld = 0;
+
+            GD.Print($"[ESMReader] BuildLandCoordinateMap: world=0x{worldFormId:X8} landIndex={landIndex.Count} cellIndex={cellIndex.Count}");
 
             lock (_lock)
             {
@@ -239,6 +247,13 @@ namespace OpenFo3.ESM
                 TraverseForLandCoords(_stream.Length, landIndex, cellIndex, worldFormId, coordMap, 0, 0, 0);
             }
 
+            GD.Print($"[ESMReader] BuildLandCoordinateMap result: {coordMap.Count} LANDs mapped for world 0x{worldFormId:X8} (cellsSeen={_cellSeenInWorld} landsSeen={_landSeenInWorld})");
+            foreach (var kvp in coordMap)
+            {
+                uint landFormId = kvp.Key;
+                var entry = landIndex[landFormId];
+                GD.Print($"[CoordMap] LAND 0x{landFormId:X8} CellFormId=0x{entry.CellFormId:X8} -> cell({kvp.Value.Item1},{kvp.Value.Item2})");
+            }
             return coordMap;
         }
 
@@ -263,6 +278,34 @@ namespace OpenFo3.ESM
                     if (groupType == 1) // World Children
                         nextWorld = label;
 
+                    // Cell Children GRUPs (types 6-10) have the parent CELL's formId as label.
+                    // Look up the CELL's XCLC from cellIndex so LANDs inside get correct coordinates,
+                    // even when multiple CELLs are clustered before their Cell Children GRUPs.
+                    // IMPORTANT: Save and restore stream position because GetRecordAtOffset/GetSubRecords seek the stream.
+                    if (groupType >= 6 && groupType <= 10)
+                    {
+                        long savedPos = _stream.Position;
+                        if (cellIndex.TryGetValue(label, out var cellEntry))
+                        {
+                            var cellRecord = GetRecordAtOffset(cellEntry.Offset);
+                            var subs = GetSubRecords(cellRecord);
+                            foreach (var sub in subs)
+                            {
+                                if (sub.Type == "XCLC" && sub.Data.Length >= 8)
+                                {
+                                    lastCellX = BitConverter.ToInt32(sub.Data, 0);
+                                    lastCellY = BitConverter.ToInt32(sub.Data, 4);
+                                    break;
+                                }
+                            }
+                        }
+                        else if (currentWorld == worldFormId)
+                        {
+                            GD.Print($"[GRUP] CellChildren label=0x{label:X8} NOT FOUND in cellIndex for world 0x{worldFormId:X8}");
+                        }
+                        _stream.Position = savedPos;
+                    }
+
                     long grupEnd = startOffset + size;
                     if (grupEnd > _stream.Length) grupEnd = _stream.Length;
 
@@ -281,6 +324,7 @@ namespace OpenFo3.ESM
                     {
                         if (type == "CELL")
                         {
+                            _cellSeenInWorld++;
                             // Read XCLC via GetSubRecords for reliability
                             var cellRecord = GetRecordAtOffset(startOffset);
                             var subs = GetSubRecords(cellRecord);
@@ -296,6 +340,7 @@ namespace OpenFo3.ESM
                         }
                         else if (type == "LAND" && landIndex.ContainsKey(formId))
                         {
+                            _landSeenInWorld++;
                             coordMap[formId] = (lastCellX, lastCellY);
                         }
                     }
