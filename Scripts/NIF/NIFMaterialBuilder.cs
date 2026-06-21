@@ -165,15 +165,14 @@ namespace OpenFo3.NIF
                 bool hasAlphaBlend = (f & 0x0001) != 0;
                 bool hasAlphaTest = (f & 0x0200) != 0;
 
-                // テクスチャが実際にαチャンネルを持っている場合のみ透過を適用
-                // FO3 では NiAlphaProperty がデフォルトで AlphaTest=true のため、
-                // テクスチャにαがない場合は無視する
                 bool texActuallyHasAlpha = textureHasAlpha != null && texPaths != null &&
-                    texPaths.Length > SlotDiffuse && !string.IsNullOrEmpty(texPaths[SlotDiffuse]) &&
-                    textureHasAlpha(texPaths[SlotDiffuse]);
+                    (TextureHasAlphaForSlot(texPaths, textureHasAlpha, SlotDiffuse) ||
+                     TextureHasAlphaForSlot(texPaths, textureHasAlpha, SlotGlowSkinHair) ||
+                     TextureHasAlphaForSlot(texPaths, textureHasAlpha, SlotHeightParallax));
 
                 if (texActuallyHasAlpha)
                 {
+                    mat.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
                     if (hasAlphaBlend)
                         mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
                     else if (hasAlphaTest)
@@ -185,18 +184,21 @@ namespace OpenFo3.NIF
             }
             else if ((shader.ShaderFlags & 0x00000100) != 0)
             {
-                bool diffuseHasAlpha = false;
                 if (textureHasAlpha != null && texPaths != null &&
-                    texPaths.Length > SlotDiffuse && !string.IsNullOrEmpty(texPaths[SlotDiffuse]))
-                {
-                    diffuseHasAlpha = textureHasAlpha(texPaths[SlotDiffuse]);
-                }
-                if (diffuseHasAlpha)
+                    (TextureHasAlphaForSlot(texPaths, textureHasAlpha, SlotDiffuse) ||
+                     TextureHasAlphaForSlot(texPaths, textureHasAlpha, SlotGlowSkinHair) ||
+                     TextureHasAlphaForSlot(texPaths, textureHasAlpha, SlotHeightParallax)))
                 {
                     mat.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
                     mat.AlphaScissorThreshold = 0.5f;
+                    mat.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
                 }
             }
+        }
+
+        private static bool TextureHasAlphaForSlot(string[] texPaths, Func<string, bool> textureHasAlpha, int slot)
+        {
+            return slot < texPaths.Length && !string.IsNullOrEmpty(texPaths[slot]) && textureHasAlpha(texPaths[slot]);
         }
 
         private static void ApplyDiffuse(StandardMaterial3D mat,
@@ -404,6 +406,7 @@ namespace OpenFo3.NIF
         {
             mat.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
             mat.AlphaScissorThreshold = 0.3f;
+            mat.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
             mat.Roughness = 0.9f;
             mat.Metallic = 0.0f;
             mat.SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled;
@@ -598,7 +601,10 @@ namespace OpenFo3.NIF
             mat.SpecularMode = def.SpecularMode;
 
             if (def.Transparent && mat.Transparency == BaseMaterial3D.TransparencyEnum.Disabled)
+            {
                 mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+                mat.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+            }
 
             if (def.SubsurfaceScattering)
             {
