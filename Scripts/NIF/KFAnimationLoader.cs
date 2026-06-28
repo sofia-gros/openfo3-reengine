@@ -378,7 +378,7 @@ namespace OpenFo3.NIF
             return keys;
         }
 
-        public static Animation BuildGodotAnimation(KFAnimationData animData, SkeletonData skeleton, float worldScale = 0.015f)
+        public static Animation BuildGodotAnimation(KFAnimationData animData, SkeletonData skeleton, float worldScale = 0.015f, string trackPrefix = "NPCVisual/Skeleton:")
         {
             var anim = new Animation();
             anim.Length = animData.Duration > 0 ? animData.Duration : 1f;
@@ -402,7 +402,7 @@ namespace OpenFo3.NIF
                 }
                 if (boneIndex < 0) continue;
 
-                string trackPath = $"{boneName}:transform";
+                string trackPath = $"{trackPrefix}{boneName}";
                 int trackIdx = anim.AddTrack(Animation.TrackType.Position3D);
                 anim.TrackSetPath(trackIdx, trackPath);
 

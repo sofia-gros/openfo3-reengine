@@ -40,6 +40,11 @@ namespace OpenFo3.ESM
             _reader = new BinaryReader(_stream);
         }
 
+        public Dictionary<uint, RecordEntry> BuildFormIdIndex(params string[] targetTypes)
+        {
+            return BuildFormIdIndex((IEnumerable<string>)targetTypes);
+        }
+
         public Dictionary<uint, RecordEntry> BuildFormIdIndex(IEnumerable<string> targetTypes)
         {
             var index = new Dictionary<uint, RecordEntry>();

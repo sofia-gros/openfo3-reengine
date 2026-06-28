@@ -49,6 +49,21 @@ namespace OpenFo3.World
             return result;
         }
 
+        public List<NavMeshData> GetNavMeshesForCell(uint cellFormId)
+        {
+            var result = new List<NavMeshData>();
+
+            foreach (var kvp in _navmIndex)
+            {
+                if (kvp.Value.CellFormId != cellFormId) continue;
+                var nav = ParseNavMesh(kvp.Key);
+                if (nav != null) result.Add(nav);
+            }
+
+            GD.Print($"[NavMeshBuilder] Cell 0x{cellFormId:X8}: {result.Count} navmeshes");
+            return result;
+        }
+
         public NavMeshData ParseNavMesh(uint formId)
         {
             if (!_navmIndex.TryGetValue(formId, out var entry)) return null;

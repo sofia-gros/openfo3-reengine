@@ -10,6 +10,8 @@ using OpenFo3.ESM;
 using OpenFo3.NIF;
 using OpenFo3.BSA;
 using OpenFo3.World;
+using OpenFo3.Player;
+using OpenFo3.UI;
 
 public partial class Megaton : Node3D
 {
@@ -49,6 +51,11 @@ public partial class Megaton : Node3D
 	private PickHandler _pickHandler;
 	private WorldSelectMenu _worldSelectMenu;
 	private bool _hudVisible = true;
+	private PlayerController _player;
+	private MainMenu _mainMenu;
+	private IntroSequence _introSequence;
+	private bool _introActive;
+	private bool _inGame;
 
 	private struct InstanceRequest
 	{
@@ -59,6 +66,7 @@ public partial class Megaton : Node3D
 		public string BaseType;
 		public float Scale;
 		public uint WorldFormId;
+		public uint CellFormId;
 		public uint BaseFormId;
 		public List<string> AnimPaths;
 	}
@@ -73,11 +81,22 @@ public partial class Megaton : Node3D
 		public bool HasMnam;
 	}
 
+	private struct CellData
+	{
+		public uint FormId;
+		public string Edid;
+		public string Name;
+	}
+
 	private Dictionary<string, WorldData> _worldDataByName = new();
 	private Dictionary<uint, string> _worldNameById = new();
 	private Dictionary<string, Node3D> _worldContainers = new();
 	private Dictionary<string, bool> _worldLoading = new();
 	private List<string> _worldNameList = new();
+	private Dictionary<string, CellData> _cellDataByEdid = new();
+	private Dictionary<uint, string> _cellEdidById = new();
+	private Dictionary<string, Node3D> _cellContainers = new();
+	private Dictionary<string, bool> _cellLoading = new();
 	private string _currentWorldName;
 	private Label3D _worldLabel;
 	private bool _initialized = false;
@@ -121,6 +140,13 @@ public partial class Megaton : Node3D
 	public override void _Process(double delta)
 	{
 		if (!_initialized) return;
+
+		if (!_inGame)
+		{
+			UpdateDebugOverlay();
+			_frameCount++;
+			return;
+		}
 
 		int maxPerFrame = PerformanceSettings.MaxInstancesPerFrame;
 		for (int i = 0; i < maxPerFrame && _instantiateQueue.TryDequeue(out var req); i++)
@@ -187,8 +213,8 @@ public partial class Megaton : Node3D
 		if (_debugShowPaths) debugFlags += " PATH";
 		if (debugFlags.Length > 0) debugFlags = "  |" + debugFlags;
 
-		_debugLabel.Text = $"OpenFo3: ReEngine  |  1-9: Switch World\n" +
-			$"FPS: {fps,4:F0}  |  World [{worldIdx + 1}]: {worldInfo}\n" +
+		_debugLabel.Text = $"OpenFo3: ReEngine  |  F1: Cam FPS/TPS  |  F2: Debug FreeCam\n" +
+			$"FPS: {fps,4:F0}  |  World/Cell: {worldInfo}\n" +
 			$"Queued: {pending}  |  Meshes: {meshesCached}  |  Textures: {texturesCached}  |  NIFs: {nifsCached}\n" +
 			$"Camera: ({camPos.X:F1}, {camPos.Y:F1}, {camPos.Z:F1})" +
 			$"{debugFlags}\n" +
@@ -273,6 +299,7 @@ public partial class Megaton : Node3D
 		public override void _Input(InputEvent @event)
 		{
 			if (!_initialized) return;
+			if (!_inGame || _introActive) return;
 			if (@event is InputEventKey key && key.Pressed && !key.Echo)
 			{
 				// World select menu (P)
@@ -359,27 +386,13 @@ public partial class Megaton : Node3D
 
 			CreateDebugOverlay();
 			DiscoverWorlds();
-
-			string targetWorld = GamePaths.GetTargetWorld();
-			if (!_worldDataByName.ContainsKey(targetWorld))
-			{
-				GD.PrintErr($"[Megaton] Target world '{targetWorld}' not found! Auto-selecting best world...");
-				targetWorld = _worldNameList.FirstOrDefault(n =>
-					n.Contains("Wasteland", StringComparison.OrdinalIgnoreCase) ||
-					n.Contains("Vault101", StringComparison.OrdinalIgnoreCase) ||
-					n.Contains("WasteLand", StringComparison.OrdinalIgnoreCase));
-				targetWorld ??= _worldNameList.Count > 0 ? _worldNameList[0] : null;
-			}
-			GD.Print($"[Megaton] Selected target world: {targetWorld}");
+			DiscoverCells();
 
 			CreateWorldLabel();
-
-			if (targetWorld != null)
-				_ = LoadWorldAsync(targetWorld);
-
-			CreateHud();
 			CreateWorldSelectMenu();
 			PopulateWorldSelectMenu();
+
+			ShowMainMenu();
 
 			_initialized = true;
 		}
@@ -387,6 +400,179 @@ public partial class Megaton : Node3D
 		{
 			GD.PrintErr($"[Megaton] Init error: {e.Message}");
 		}
+	}
+
+	private void ShowMainMenu()
+	{
+		_inGame = false;
+		_introActive = false;
+
+		_mainMenu = new MainMenu();
+		_mainMenu.NewGame += OnNewGame;
+		_mainMenu.ContinueGame += OnContinueGame;
+		_mainMenu.LoadGame += OnLoadGame;
+		_mainMenu.Settings += OnSettings;
+		_mainMenu.Quit += OnQuit;
+		AddChild(_mainMenu);
+		_mainMenu.ShowMenu();
+
+		Input.MouseMode = Input.MouseModeEnum.Visible;
+		GD.Print("[Megaton] Main menu displayed");
+	}
+
+	private async void OnNewGame()
+	{
+		GD.Print("[Megaton] New Game selected. Loading Vault 101...");
+		_mainMenu?.HideMenu();
+
+		string cellName = "Vault101a";
+		_currentWorldName = cellName;
+
+		CreateHud();
+
+		// Add temporary fade overlay during loading
+		var canvas = GetNodeOrNull<CanvasLayer>("DebugOverlay");
+		ColorRect fadeRect = null;
+		if (canvas != null)
+		{
+			fadeRect = new ColorRect();
+			fadeRect.Color = new Color(0, 0, 0, 1);
+			fadeRect.MouseFilter = Control.MouseFilterEnum.Ignore;
+			fadeRect.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+			canvas.AddChild(fadeRect);
+		}
+
+		await LoadCellAsync(cellName);
+
+		// Wait for asset instantiation queue to clear (up to 3 seconds)
+		for (int i = 0; i < 180; i++)
+		{
+			if (_instantiateQueue.Count == 0) break;
+			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+		}
+
+		// Spawn player inside Vault 101
+		// Vault101aのプレイヤー開始地点: FO3内部座標から変換
+		// Vault101a セルの中央付近（PlayerStartMarker位置）
+		// FO3 DATA: X≈-15000, Y≈15000, Z≈-175 → Godot: X=-225, Y=-2.625, Z=-225
+		// セルが原点ローカル座標（インテリアセルはCenter減算なし）なので WorldScale のみ適用
+		Vector3 vault101StartPos = GetVault101StartPosition();
+		CreatePlayer(vault101StartPos);
+
+		// Fade in
+		if (fadeRect != null)
+		{
+			var tween = CreateTween();
+			tween.TweenProperty(fadeRect, "color", new Color(0, 0, 0, 0), 1.5f);
+			tween.TweenCallback(Callable.From(() => fadeRect.QueueFree()));
+		}
+
+		_inGame = true;
+		Input.MouseMode = Input.MouseModeEnum.Captured;
+		GD.Print("[Megaton] Game started inside Vault 101.");
+	}
+
+	private void OnContinueGame()
+	{
+		GD.Print("[Megaton] Continue selected");
+		_mainMenu.HideMenu();
+		LoadLastSaveGame();
+	}
+
+	private void OnLoadGame()
+	{
+		GD.Print("[Megaton] Load selected");
+		_mainMenu.HideMenu();
+		LoadLastSaveGame();
+	}
+
+	private void OnSettings()
+	{
+		GD.Print("[Megaton] Settings selected");
+	}
+
+	private void OnQuit()
+	{
+		GD.Print("[Megaton] Quit selected");
+		GetTree().Quit();
+	}
+
+	private void StartIntroSequence()
+	{
+		_introActive = true;
+		_inGame = false;
+
+		_introSequence = new IntroSequence();
+		_introSequence.Name = "IntroSequence";
+		_introSequence.IntroComplete += OnIntroComplete;
+		AddChild(_introSequence);
+
+		_introSequence.StartIntro();
+		GD.Print("[Megaton] Intro sequence started");
+	}
+
+	private void OnIntroComplete(string playerName, int[] specialValues, bool isMale)
+	{
+		GD.Print($"[Megaton] Intro complete for {playerName}. Loading Capital Wasteland...");
+
+		if (_introSequence != null)
+		{
+			_introSequence.QueueFree();
+			_introSequence = null;
+		}
+
+		_introActive = false;
+
+		// Load the Capital Wasteland world (Vault 101 entrance area)
+		string worldName = _worldNameList.FirstOrDefault(n =>
+			n.Contains("Wasteland", StringComparison.OrdinalIgnoreCase) ||
+			n.Contains("WasteLand", StringComparison.OrdinalIgnoreCase));
+		if (worldName == null)
+			worldName = _worldNameList.Count > 0 ? _worldNameList[0] : null;
+
+		if (worldName != null)
+		{
+			GD.Print($"[Megaton] Loading world: {worldName}");
+			_ = LoadWorldAsync(worldName);
+		}
+
+		CreateHud();
+		// Vault 101 entrance in Capital Wasteland: FO3 coords approx (-1560, -2800, 0)
+		// Converted to Godot scale: (-23.4, 20, -42)
+		CreatePlayer(new Vector3(-23, 25, -42));
+		ApplyCharacterData(playerName, specialValues, isMale);
+
+		_inGame = true;
+		Input.MouseMode = Input.MouseModeEnum.Captured;
+
+		GD.Print("[Megaton] Player is now in the Capital Wasteland");
+	}
+
+	private void ApplyCharacterData(string playerName, int[] specialValues, bool isMale)
+	{
+		GD.Print($"[Megaton] Character: {playerName}, Male={isMale}, SPECIAL=[{string.Join(",", specialValues)}]");
+	}
+
+	private void LoadLastSaveGame()
+	{
+		string targetWorld = GamePaths.GetTargetWorld();
+		if (!_worldDataByName.ContainsKey(targetWorld))
+		{
+			targetWorld = _worldNameList.FirstOrDefault(n =>
+				n.Contains("Wasteland", StringComparison.OrdinalIgnoreCase) ||
+				n.Contains("WasteLand", StringComparison.OrdinalIgnoreCase));
+			targetWorld ??= _worldNameList.Count > 0 ? _worldNameList[0] : null;
+		}
+
+		GD.Print($"[Megaton] Loading world: {targetWorld}");
+
+		if (targetWorld != null)
+			_ = LoadWorldAsync(targetWorld);
+
+		CreateHud();
+		CreatePlayer(new Vector3(0, 20, 0));
+		_inGame = true;
+		Input.MouseMode = Input.MouseModeEnum.Captured;
 	}
 
 	private HudOverlay _hud;
@@ -398,6 +584,39 @@ public partial class Megaton : Node3D
 		_hud.Name = "HUD";
 		AddChild(_hud);
 		_hud.SetLocation("Megaton");
+	}
+
+	private void CreatePlayer(Vector3? spawnPosition = null)
+	{
+		var existingCam = GetNodeOrNull<Camera3D>("Camera3D");
+		if (existingCam != null)
+		{
+			existingCam.QueueFree();
+		}
+
+		_player = new PlayerController();
+		_player.Name = "PlayerController";
+		AddChild(_player);
+
+		if (_hud != null)
+			_player.SetHud(_hud);
+
+		Vector3 pos = spawnPosition ?? new Vector3(0, 20, 0);
+		_player.Spawn(pos);
+
+		GD.Print($"[Megaton] PlayerController created at {pos}");
+	}
+
+	/// <summary>
+	/// Vault101aセルのプレイヤー開始位置を取得する。
+	/// インテリアセルはワールド中心減算なし（FO3座標 × WorldScale のみ）。
+	/// REFRのPlayerStartMarkerから推定した代表値を使用。
+	/// </summary>
+	private Vector3 GetVault101StartPosition()
+	{
+		// カメラで確認したVault101a内の有効なプレイヤー開始位置
+		// Camera: (156.0, 44.0, -58.0) から設定
+		return new Vector3(156f, 44f, -58f);
 	}
 
 	private void CreateWorldSelectMenu()
@@ -595,6 +814,350 @@ public partial class Megaton : Node3D
 		GD.Print($"[Megaton] Total worlds discovered: {_worldNameList.Count}");
 	}
 
+	private void DiscoverCells()
+	{
+		var cellIndex = _esm.BuildFormIdIndex(new[] { "CELL" });
+		GD.Print($"[Megaton] Discovering interior cells: {cellIndex.Count} CELL records found");
+
+		int interiorCount = 0;
+		foreach (var kvp in cellIndex)
+		{
+			try
+			{
+				var rec = _esm.GetRecordAtOffset(kvp.Value.Offset);
+				var subs = _esm.GetSubRecords(rec);
+				var edid = subs.FirstOrDefault(s => s.Type == "EDID");
+				if (edid == null) continue;
+
+				string editName = Encoding.ASCII.GetString(edid.Data).TrimEnd('\0');
+				if (string.IsNullOrEmpty(editName)) continue;
+
+				// Determine if interior by checking DATA flags byte 0
+				var data = subs.FirstOrDefault(s => s.Type == "DATA");
+				bool isInterior = true;
+				if (data != null && data.Data.Length >= 1)
+					isInterior = (data.Data[0] & 0x01) != 0; // bit 0 = 1 means interior cell
+
+				if (!isInterior) continue;
+
+				var full = subs.FirstOrDefault(s => s.Type == "FULL");
+				string displayName = full != null
+					? Encoding.ASCII.GetString(full.Data).TrimEnd('\0')
+					: editName;
+
+				_cellDataByEdid[editName] = new CellData
+				{
+					FormId = rec.FormId,
+					Edid = editName,
+					Name = displayName,
+				};
+				_cellEdidById[rec.FormId] = editName;
+
+				interiorCount++;
+			}
+			catch (Exception e)
+			{
+				GD.PrintErr($"[Megaton] Error discovering CELL at 0x{kvp.Value.Offset:X8}: {e.Message}");
+			}
+		}
+
+		GD.Print($"[Megaton] Interior cells discovered: {interiorCount}");
+	}
+
+	private async Task LoadCellAsync(string cellEdid)
+	{
+		if (_cellLoading.ContainsKey(cellEdid) && _cellLoading[cellEdid]) return;
+		if (_cellContainers.ContainsKey(cellEdid))
+		{
+			ShowCell(cellEdid);
+			return;
+		}
+
+		await LoadCellInnerAsync(cellEdid);
+		ShowCell(cellEdid);
+	}
+
+	private Task LoadCellInnerAsync(string cellEdid)
+	{
+		if (_cellLoading.ContainsKey(cellEdid) && _cellLoading[cellEdid]) return Task.CompletedTask;
+		if (_cellContainers.ContainsKey(cellEdid)) return Task.CompletedTask;
+
+		if (!_cellDataByEdid.TryGetValue(cellEdid, out var cd))
+		{
+			GD.PrintErr($"[Megaton] Unknown cell: {cellEdid}");
+			return Task.CompletedTask;
+		}
+
+		_cellLoading[cellEdid] = true;
+
+		var container = new Node3D();
+		container.Name = $"Cell_{cellEdid}";
+		_cellContainers[cellEdid] = container;
+		AddChild(container);
+
+		GD.Print($"[Megaton] Loading cell '{cellEdid}' (0x{cd.FormId:X8})...");
+
+		// Load REFR, ACHR, ACRE for this cell
+		LoadCellRefrs(cd);
+
+		// Load lighting
+		var lighting = _lightingLoader.GetCellLighting(cd.FormId);
+		if (lighting != null)
+		{
+			GD.Print($"[Megaton] Applying lighting for cell '{cellEdid}'");
+			LightingLoader.ApplyCellLighting(container, lighting);
+		}
+
+		// Load navmeshes for this cell
+		var navMeshes = _navMeshBuilder.GetNavMeshesForCell(cd.FormId);
+		if (navMeshes.Count > 0)
+		{
+			var navRegion = new NavigationRegion3D();
+			foreach (var navData in navMeshes)
+			{
+				var navMesh = NavMeshBuilder.BuildNavigationMesh(navData, Vector2.Zero, WorldScale);
+				if (navMesh != null)
+				{
+					navRegion.NavigationMesh = navMesh;
+					break; // only one navmesh per cell for now
+				}
+			}
+			container.AddChild(navRegion);
+		}
+
+		_cellLoading[cellEdid] = false;
+		GD.Print($"[Megaton] Cell '{cellEdid}' loaded successfully.");
+		return Task.CompletedTask;
+	}
+
+	private void ShowCell(string cellEdid)
+	{
+		// Hide all other cells
+		foreach (var kvp in _cellContainers)
+		{
+			kvp.Value.Visible = kvp.Key == cellEdid;
+		}
+
+		// Also hide world containers
+		foreach (var kvp in _worldContainers)
+		{
+			kvp.Value.Visible = false;
+		}
+	}
+
+	private void LoadCellRefrs(CellData cd)
+	{
+		var refrsToProcess = new List<long>();
+		foreach (var kvp in _refrFormIDIndex)
+		{
+			if (kvp.Value.CellFormId == cd.FormId)
+				refrsToProcess.Add(kvp.Value.Offset);
+		}
+
+		int achrCount = 0, acreCount = 0;
+		foreach (var kvp in _achrIndex)
+		{
+			if (kvp.Value.CellFormId == cd.FormId)
+			{
+				refrsToProcess.Add(kvp.Value.Offset);
+				achrCount++;
+			}
+		}
+		foreach (var kvp in _acreIndex)
+		{
+			if (kvp.Value.CellFormId == cd.FormId)
+			{
+				refrsToProcess.Add(kvp.Value.Offset);
+				acreCount++;
+			}
+		}
+
+		GD.Print($"[Megaton] Cell '{cd.Edid}': {refrsToProcess.Count} placements (REFR + {achrCount} ACHR + {acreCount} ACRE).");
+
+		Parallel.ForEach(refrsToProcess, offset =>
+		{
+			ProcessCellRecord(offset, cd);
+		});
+
+		GD.Print($"[Megaton] Cell '{cd.Edid}': parsing done. Queue: {_instantiateQueue.Count}");
+	}
+
+	private void ProcessCellRecord(long offset, CellData cd)
+	{
+		try
+		{
+			ESMRecord record;
+			List<SubRecord> subs;
+
+			lock (_esm)
+			{
+				record = _esm.GetRecordAtOffset(offset);
+				subs = _esm.GetSubRecords(record);
+			}
+
+			string recType = record.Type;
+			var dataSub = subs.FirstOrDefault(s => s.Type == "DATA");
+			var nameSub = subs.FirstOrDefault(s => s.Type == "NAME");
+			if (dataSub == null || nameSub == null) return;
+
+			uint formId = BitConverter.ToUInt32(nameSub.Data, 0);
+
+			RecordEntry baseEntry;
+			string nifPath = null;
+			string baseType = null;
+			List<SubRecord> baseSubs = null;
+
+			lock (_esm)
+			{
+				if (!_masterFormIDIndex.TryGetValue(formId, out baseEntry)) return;
+				var baseRecord = _esm.GetRecordAtOffset(baseEntry.Offset);
+				baseType = baseRecord.Type;
+				baseSubs = _esm.GetSubRecords(baseRecord);
+				var modl = baseSubs.FirstOrDefault(s => s.Type == "MODL");
+				if (modl != null)
+				{
+					nifPath = Encoding.ASCII.GetString(modl.Data).TrimEnd('\0').Replace('\\', '/');
+				}
+			}
+
+			if (nifPath == null && baseType != "LIGH" && baseType != "SOUN") return;
+
+			if (nifPath != null)
+			{
+				if (!nifPath.StartsWith("meshes/", StringComparison.OrdinalIgnoreCase))
+					nifPath = "meshes/" + nifPath;
+
+				string nifLower = nifPath.ToLowerInvariant();
+				string fname = System.IO.Path.GetFileName(nifLower);
+				bool isDebug =
+					nifLower.StartsWith("meshes/marker") ||
+					nifLower.Contains("editormarker") ||
+					fname.Contains("shadow") ||
+					fname.StartsWith("cone") ||
+					(nifLower.Contains("/effects/") && fname.StartsWith("fxlight"));
+
+				if (isDebug) return;
+
+				EnsureNifParsed(nifPath);
+			}
+
+			float px = BitConverter.ToSingle(dataSub.Data, 0);
+			float py = BitConverter.ToSingle(dataSub.Data, 4);
+			float pz = BitConverter.ToSingle(dataSub.Data, 8);
+			float rx = 0, ry = 0, rz = 0;
+			if (dataSub.Data.Length >= 24)
+			{
+				rx = BitConverter.ToSingle(dataSub.Data, 12);
+				ry = BitConverter.ToSingle(dataSub.Data, 16);
+				rz = BitConverter.ToSingle(dataSub.Data, 20);
+			}
+
+			var xclSub = subs.FirstOrDefault(s => s.Type == "XSCL");
+			float scale = 1f;
+			if (xclSub != null && xclSub.Data.Length >= 4)
+				scale = BitConverter.ToSingle(xclSub.Data, 0);
+
+			List<string> animPaths = null;
+			if (baseType == "CREA" || baseType == "NPC_")
+			{
+				lock (_esm)
+				{
+					var kffz = baseSubs.FirstOrDefault(s => s.Type == "KFFZ");
+					if (kffz != null && kffz.Data.Length > 0)
+					{
+						animPaths = new List<string>();
+						int pos = 0;
+						while (pos < kffz.Data.Length)
+						{
+							int end = Array.IndexOf(kffz.Data, (byte)0, pos);
+							if (end < 0) end = kffz.Data.Length;
+							string animPath = Encoding.ASCII.GetString(kffz.Data, pos, end - pos);
+							if (!string.IsNullOrEmpty(animPath))
+							{
+								string p = animPath.Replace('\\', '/');
+								if (!p.StartsWith("meshes/"))
+									p = "meshes/" + p;
+								animPaths.Add(p);
+							}
+							pos = end + 1;
+						}
+					}
+				}
+			}
+
+			// Interior cells: no center subtraction
+			_instantiateQueue.Enqueue(new InstanceRequest
+			{
+				Path = nifPath,
+				Position = new Vector3(px * WorldScale, pz * WorldScale, -(py * WorldScale)),
+				Rotation = new Vector3(rx, ry, rz),
+				FormId = formId,
+				BaseType = baseType,
+				Scale = scale,
+				CellFormId = cd.FormId,
+				BaseFormId = formId,
+				AnimPaths = animPaths,
+			});
+
+			if (baseType == "SCOL")
+			{
+				EmitCellScolParts(baseSubs, formId, px, py, pz, rx, ry, rz, cd);
+			}
+		}
+		catch (Exception e)
+		{
+			GD.PrintErr($"[Megaton] Error processing cell record at 0x{offset:X8}: {e.Message}");
+		}
+	}
+
+	private void EmitCellScolParts(List<SubRecord> baseSubs, uint scolFormId,
+		float scolPx, float scolPy, float scolPz,
+		float scolRx, float scolRy, float scolRz, CellData cd)
+	{
+		int i = 0;
+		while (i < baseSubs.Count)
+		{
+			var sub = baseSubs[i];
+			if (sub.Type == "ONAM" && sub.Data.Length >= 4)
+			{
+				uint partFormId = BitConverter.ToUInt32(sub.Data, 0);
+				if (i + 1 < baseSubs.Count && baseSubs[i + 1].Type == "DATA")
+				{
+					var data2 = baseSubs[i + 1];
+					if (data2.Data.Length >= 24)
+					{
+						float partX = BitConverter.ToSingle(data2.Data, 0);
+						float partY = BitConverter.ToSingle(data2.Data, 4);
+						float partZ = BitConverter.ToSingle(data2.Data, 8);
+						float partRx = BitConverter.ToSingle(data2.Data, 12);
+						float partRy = BitConverter.ToSingle(data2.Data, 16);
+						float partRz = BitConverter.ToSingle(data2.Data, 20);
+
+						// Transform part by parent SCOL transform
+						float cx = partX * Mathf.Cos(-scolRz) - partY * Mathf.Sin(-scolRz);
+						float cy = partX * Mathf.Sin(-scolRz) + partY * Mathf.Cos(-scolRz);
+						float worldX = scolPx + cx;
+						float worldY = scolPy + cy;
+						float worldZ = scolPz + partZ;
+						float worldRx = scolRx + partRx;
+						float worldRy = scolRy + partRy;
+						float worldRz = scolRz + partRz;
+
+						_instantiateQueue.Enqueue(new InstanceRequest
+						{
+							BaseFormId = partFormId,
+							Position = new Vector3(worldX * WorldScale, worldZ * WorldScale, -(worldY * WorldScale)),
+							Rotation = new Vector3(worldRx, worldRy, worldRz),
+							Scale = 1f,
+							CellFormId = cd.FormId,
+						});
+					}
+				}
+			}
+			i++;
+		}
+	}
+
 	private async Task LoadWorldAsync(string worldName)
 	{
 		if (_worldLoading.ContainsKey(worldName) && _worldLoading[worldName]) return;
@@ -637,6 +1200,9 @@ public partial class Megaton : Node3D
 
 		// Load navmesh
 		LoadNavMesh(wd, container);
+
+		// Load ambient audio for this world
+		LoadWorldAmbientAudio(wd, container);
 
 		// Load REFRs on background thread
 		await Task.Run(() => LoadWorldRefrs(wd));
@@ -754,6 +1320,57 @@ public partial class Megaton : Node3D
 		catch (Exception e)
 		{
 			GD.PrintErr($"[Megaton] NavMesh load error for '{wd.Name}': {e.Message}");
+		}
+	}
+
+	private void LoadWorldAmbientAudio(WorldData wd, Node3D container)
+	{
+		try
+		{
+			// Collect all SOUN records referenced in this world's REFR placements
+			var ambientSounds = new List<SoundRecordData>();
+			var seenFormIds = new HashSet<uint>();
+
+			foreach (var kvp in _refrFormIDIndex)
+			{
+				if (kvp.Value.WorldFormId != wd.FormId) continue;
+
+				try
+				{
+					var record = _esm.GetRecordAtOffset(kvp.Value.Offset);
+					var subs = _esm.GetSubRecords(record);
+					var nameSub = subs.FirstOrDefault(s => s.Type == "NAME");
+					if (nameSub == null) continue;
+
+					uint baseFormId = BitConverter.ToUInt32(nameSub.Data, 0);
+					if (!_masterFormIDIndex.TryGetValue(baseFormId, out var baseEntry)) continue;
+
+					var baseRecord = _esm.GetRecordAtOffset(baseEntry.Offset);
+					if (baseRecord.Type != "SOUN") continue;
+
+					if (seenFormIds.Contains(baseFormId)) continue;
+					seenFormIds.Add(baseFormId);
+
+					var soundData = _audioManager.ParseSoundRecord(baseFormId);
+					if (soundData != null && !soundData.IsMenu && !soundData.IsDialogue)
+						ambientSounds.Add(soundData);
+				}
+				catch { }
+			}
+
+			if (ambientSounds.Count > 0)
+			{
+				var ambientContainer = AudioManager.CreateAmbientSoundContainer(ambientSounds,
+					(path) => _audioManager.LoadSound(path));
+				if (ambientContainer != null)
+					container.AddChild(ambientContainer);
+
+				GD.Print($"[Megaton] Added {ambientSounds.Count} ambient sounds for '{wd.Name}'");
+			}
+		}
+		catch (Exception e)
+		{
+			GD.PrintErr($"[Megaton] Ambient audio load error for '{wd.Name}': {e.Message}");
 		}
 	}
 
@@ -1099,8 +1716,8 @@ public partial class Megaton : Node3D
 
 	private void RepositionCameraForWorld(WorldData wd)
 	{
-		var cam = GetViewport()?.GetCamera3D();
-		if (cam == null) return;
+		Node3D target = _player != null ? (Node3D)_player : GetViewport()?.GetCamera3D();
+		if (target == null) return;
 
 		float fo3X, fo3Y;
 
@@ -1121,9 +1738,9 @@ public partial class Megaton : Node3D
 
 		float godotY = wd.DefaultLandHeight * WorldScale + 20f;
 
-		cam.GlobalPosition = new Vector3(godotX, godotY, godotZ);
+		target.GlobalPosition = new Vector3(godotX, godotY, godotZ);
 
-		GD.Print($"[Megaton] Camera -> ({godotX:F1}, {godotY:F1}, {godotZ:F1}) for '{wd.Name}'");
+		GD.Print($"[Megaton] Player -> ({godotX:F1}, {godotY:F1}, {godotZ:F1}) for '{wd.Name}'");
 	}
 
 	private bool TryReadStartPosition(string worldName, out float fo3X, out float fo3Y)
@@ -1263,12 +1880,61 @@ public partial class Megaton : Node3D
 		MeshInstance3D inst = null;
 		Node3D physicsBody = null;
 
+		bool isNpc = req.BaseType == "NPC_" || req.BaseType == "CREA";
+
 		if (!string.IsNullOrEmpty(req.Path))
 		{
 			var mesh = GetOrBuildMesh(req.Path);
+			bool isSkinned = _skinnedCache.TryGetValue(req.Path, out var skinnedNodes) && skinnedNodes.Count > 0;
+
+			// NPC/CREA handling: create NpcAgent with skinned mesh + AI
+			if (isNpc)
+			{
+				var basis = Basis.Identity;
+				basis = basis.Rotated(Vector3.Right,   req.Rotation.X);
+				basis = basis.Rotated(Vector3.Forward, req.Rotation.Y);
+				basis = basis.Rotated(Vector3.Up,      req.Rotation.Z);
+				basis = basis.Scaled(Vector3.One * req.Scale);
+				var transform = new Transform3D(basis, req.Position);
+
+				var npcAgent = new NpcAgent();
+				npcAgent.Name = $"NPC_{req.FormId:X8}";
+				npcAgent.Transform = transform;
+				npcAgent.NpcName = GetNpcNameShort(req.FormId);
+				npcAgent.MovementSpeed = 1.5f + (float)new Random().NextDouble() * 1.5f;
+				npcAgent.WanderRadius = 15f + (float)new Random().NextDouble() * 15f;
+				container.AddChild(npcAgent);
+
+				if (isSkinned)
+				{
+					foreach (var srcNode in skinnedNodes)
+					{
+						var clone = CloneNodeTree(srcNode);
+						clone.Transform = Transform3D.Identity;
+						npcAgent.AttachSkinnedMesh(clone);
+						var meshInst = clone.FindChild("*", recursive: true) as MeshInstance3D;
+						if (meshInst != null)
+							TrackProp(meshInst, npcAgent, req.Position, req.Path, meshInst.Mesh as ArrayMesh, null);
+					}
+				}
+				else if (mesh != null)
+				{
+					var meshInst2 = RentMeshInstance(req.Path, mesh, Transform3D.Identity, npcAgent);
+					npcAgent.AttachSkinnedMesh(meshInst2);
+					TrackProp(meshInst2, npcAgent, req.Position, req.Path, mesh, null);
+				}
+
+				if (req.AnimPaths != null && req.AnimPaths.Count > 0)
+				{
+					var anims = BuildAnimationsForNpc(req.Path, req.AnimPaths);
+					npcAgent.LoadAnimations(anims);
+				}
+
+				goto AfterMesh;
+			}
 
 			// Check for skinned node hierarchy (skeleton + skinned meshes)
-			if (_skinnedCache.TryGetValue(req.Path, out var skinnedNodes) && skinnedNodes.Count > 0)
+			if (isSkinned)
 			{
 				var basis = Basis.Identity;
 				basis = basis.Rotated(Vector3.Right,   req.Rotation.X);
@@ -1324,6 +1990,7 @@ public partial class Megaton : Node3D
 			}
 		}
 
+		AfterMesh:
 		// Create particle systems from the NIF
 		if (!string.IsNullOrEmpty(req.Path) && _particleCache.TryGetValue(req.Path, out var particles))
 		{
@@ -1413,6 +2080,34 @@ public partial class Megaton : Node3D
 		}
 	}
 
+	private string GetNpcNameShort(uint formId)
+	{
+		if (!_masterFormIDIndex.TryGetValue(formId, out var entry)) return "NPC";
+
+		try
+		{
+			var record = _esm.GetRecordAtOffset(entry.Offset);
+			if (record.Type != "NPC_" && record.Type != "CREA") return "NPC";
+
+			var subs = _esm.GetSubRecords(record);
+			var full = subs.FirstOrDefault(s => s.Type == "FULL");
+			if (full != null && full.Data.Length > 0)
+			{
+				return Encoding.ASCII.GetString(full.Data).TrimEnd('\0');
+			}
+
+			// Try editor ID
+			var edid = subs.FirstOrDefault(s => s.Type == "EDID");
+			if (edid != null && edid.Data.Length > 0)
+			{
+				return Encoding.ASCII.GetString(edid.Data).TrimEnd('\0');
+			}
+		}
+		catch { }
+
+		return $"NPC_{formId:X4}";
+	}
+
 	private void OnObjectPicked(Node3D pickedNode, Vector3 position, uint formId)
 	{
 		if (formId != 0)
@@ -1427,6 +2122,38 @@ public partial class Megaton : Node3D
 			if (_hud != null)
 				_hud.ShowInfo($"Selected: {pickedNode.Name}");
 		}
+	}
+
+	private List<(string Name, Animation Anim)> BuildAnimationsForNpc(string nifPath, List<string> animPaths)
+	{
+		var result = new List<(string Name, Animation Anim)>();
+
+		if (!_nifCache.TryGetValue(nifPath, out var nif)) return result;
+		var geom = NIFMeshBuilder.ExtractGeometry(nif);
+
+		foreach (var kfPath in animPaths)
+		{
+			var anims = _animationManager.LoadKfAnimations(kfPath);
+			if (anims == null) continue;
+
+			foreach (var animData in anims)
+			{
+				if (geom.Skeleton == null) continue;
+
+				try
+				{
+					var anim = KFAnimationLoader.BuildGodotAnimation(animData, geom.Skeleton, WorldScale);
+					string name = animData.Name ?? System.IO.Path.GetFileNameWithoutExtension(kfPath);
+					result.Add((name, anim));
+				}
+				catch (Exception e)
+				{
+					GD.PrintErr($"[Megaton] Failed to build anim '{animData.Name}': {e.Message}");
+				}
+			}
+		}
+
+		return result;
 	}
 
 	private void TryLoadAnimations(InstanceRequest req, Node3D container)
@@ -1769,21 +2496,37 @@ public partial class Megaton : Node3D
 		entries.Clear();
 	}
 
+	// FO3方式のチャンク読み込み: プレイヤー座標からの距離に基づき表示/非表示を切り替える。
+	// カメラの向きは一切参照しない（IsPositionInFrustumは使用しない）。
+	private const float PropCullDistance = 15000f;  // Godot単位（FO3約10000ユニット≒150m相当）
+
 	private void UpdateFrustumCulling()
 	{
 		if (_currentWorldName == null) return;
 		if (!_propEntries.TryGetValue(_currentWorldName, out var entries)) return;
 
-		var cam = GetCachedCamera();
-		if (cam == null) return;
+		// プレイヤー（またはカメラ）の現在位置を取得
+		Vector3 playerPos = Vector3.Zero;
+		if (_player != null && IsInstanceValid(_player))
+			playerPos = _player.GlobalPosition;
+		else
+		{
+			var cam = GetCachedCamera();
+			if (cam == null) return;
+			playerPos = cam.GlobalPosition;
+		}
+
+		float cullDistSq = PropCullDistance * PropCullDistance;
 
 		foreach (var entry in entries)
 		{
 			if (!entry.Valid || entry.MeshInstance == null) continue;
-			bool inFrustum = cam.IsPositionInFrustum(entry.Position);
-			entry.MeshInstance.Visible = inFrustum;
+			// プレイヤーからの距離で表示判定（カメラ向き非依存）
+			float distSq = entry.Position.DistanceSquaredTo(playerPos);
+			bool visible = distSq <= cullDistSq;
+			entry.MeshInstance.Visible = visible;
 			if (entry.Parent != null && entry.Parent is StaticBody3D sb)
-				sb.Visible = inFrustum;
+				sb.Visible = visible;
 		}
 	}
 

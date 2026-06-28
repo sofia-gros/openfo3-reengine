@@ -35,6 +35,7 @@ namespace OpenFo3.World
         {
             Layer = 100;
             CreateHudElements();
+            CreateAmmoLabel();
         }
 
         private void CreateHudElements()
@@ -251,6 +252,36 @@ namespace OpenFo3.World
                 if (_infoLabel.Text == text)
                     _infoLabel.Text = "";
             };
+        }
+
+        private Label _ammoLabel;
+
+        private void CreateAmmoLabel()
+        {
+            var viewport = GetViewport();
+            Vector2 viewportSize = viewport != null ? viewport.GetVisibleRect().Size : new Vector2(1920, 1080);
+            float bottom = viewportSize.Y - HudMargin;
+            float right = viewportSize.X - HudMargin;
+
+            _ammoLabel = new Label();
+            _ammoLabel.Name = "AmmoLabel";
+            _ammoLabel.Position = new Vector2(right - 120, bottom - 55);
+            _ammoLabel.Text = "";
+            _ammoLabel.HorizontalAlignment = HorizontalAlignment.Right;
+            _ammoLabel.LabelSettings = new LabelSettings
+            {
+                FontSize = 16,
+                FontColor = new Color(1, 1, 1),
+                OutlineSize = 1,
+                OutlineColor = new Color(0, 0, 0),
+            };
+            AddChild(_ammoLabel);
+        }
+
+        public void SetAmmo(int current, int maxMag, int reserve)
+        {
+            if (_ammoLabel == null) return;
+            _ammoLabel.Text = $"{current}/{maxMag} [{reserve}]";
         }
     }
 }

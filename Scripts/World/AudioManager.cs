@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using OpenFo3.Audio;
 using OpenFo3.BSA;
 using OpenFo3.ESM;
 
@@ -138,20 +139,30 @@ namespace OpenFo3.World
 
             if (ext == ".wav")
             {
-			var wav = new AudioStreamWav();
-				wav.Data = data;
-                return wav;
+                // Some .wav files in FO3 are actually xWMA format
+                if (XWmaDecoder.IsXWma(data))
+                {
+                    byte[] decoded = XWmaDecoder.DecodeToWav(data);
+                    if (decoded == null) return null;
+                    return new AudioStreamWav { Data = decoded };
+                }
+                return new AudioStreamWav { Data = data };
+            }
+
+            if (ext == ".xwm" || ext == ".wma")
+            {
+                byte[] decoded = XWmaDecoder.DecodeToWav(data);
+                if (decoded == null)
+                {
+                    GD.Print($"[AudioManager] Failed to decode xWMA for '{path}'");
+                    return null;
+                }
+                return new AudioStreamWav { Data = decoded };
             }
 
             if (ext == ".ogg" || ext == ".mp3")
             {
                 GD.Print($"[AudioManager] Unsupported format '{ext}' for '{path}': OGG/MP3 not supported via byte array in Redot 26.1");
-                return null;
-            }
-
-            if (ext == ".xwm" || ext == ".wma")
-            {
-                GD.Print($"[AudioManager] xWMA format not supported yet for '{path}'");
                 return null;
             }
 

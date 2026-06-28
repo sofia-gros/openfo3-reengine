@@ -343,6 +343,7 @@ namespace OpenFo3.NIF
                 if (surface.Vertices == null || surface.Indices == null || surface.Indices.Length < 3)
                     continue;
 
+                // Create temp SurfaceTool to generate normals and tangents automatically
                 var st = new SurfaceTool();
                 st.Begin(Mesh.PrimitiveType.Triangles);
 
@@ -370,9 +371,48 @@ namespace OpenFo3.NIF
                 st.GenerateNormals();
                 st.GenerateTangents();
 
-                var mesh = st.Commit();
+                var tempMesh = st.Commit();
+                var arrays = tempMesh.SurfaceGetArrays(0);
+
+                int numVerts = surface.Vertices.Length;
+                var bonesArray = new int[numVerts * 4];
+                var weightsArray = new float[numVerts * 4];
+
+                for (int vi = 0; vi < numVerts; vi++)
+                {
+                    for (int k = 0; k < 4; k++)
+                    {
+                        if (surface.BoneIndices != null && vi < surface.BoneIndices.Length && surface.BoneIndices[vi] != null && k < surface.BoneIndices[vi].Length)
+                            bonesArray[vi * 4 + k] = surface.BoneIndices[vi][k];
+                        else
+                            bonesArray[vi * 4 + k] = 0;
+
+                        if (surface.BoneWeights != null && vi < surface.BoneWeights.Length && surface.BoneWeights[vi] != null && k < surface.BoneWeights[vi].Length)
+                            weightsArray[vi * 4 + k] = surface.BoneWeights[vi][k];
+                        else
+                            weightsArray[vi * 4 + k] = 0.0f;
+                    }
+                }
+
+                arrays[(int)Mesh.ArrayType.Bones] = bonesArray;
+                arrays[(int)Mesh.ArrayType.Weights] = weightsArray;
+
+                var mesh = new ArrayMesh();
+                mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+
                 var mi = new MeshInstance3D { Mesh = mesh };
                 mi.Name = "SkinnedMesh";
+
+                // Setup Skin and Skeleton settings for GPU Skining
+                var skin = new Skin();
+                int boneCount = skeleton.GetBoneCount();
+                skin.SetBindCount(boneCount);
+                for (int i = 0; i < boneCount; i++)
+                {
+                    skin.SetBindPose(i, skeleton.GetBoneRest(i).AffineInverse());
+                }
+                mi.Skin = skin;
+                mi.Skeleton = ".."; // Points to parent Skeleton3D node
 
                 // Apply material
                 if (surface.ShaderInfo != null)
