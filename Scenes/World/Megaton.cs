@@ -1935,7 +1935,7 @@ public partial class Megaton : Node3D
 				Basis rX = new Basis(new Vector3(1, 0, 0), -req.Rotation.X);
 				Basis rY = new Basis(new Vector3(0, 1, 0), -req.Rotation.Y);
 				Basis rZ = new Basis(new Vector3(0, 0, 1), -req.Rotation.Z);
-				Basis fo3Rot = rZ * rY * rX;
+				Basis fo3Rot = rX * rY * rZ;
 				Basis toEngine = new Basis(new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
 				Basis engineRot = toEngine * fo3Rot * toEngine.Inverse();
 				var basis = engineRot.Scaled(Vector3.One * req.Scale);
@@ -1983,7 +1983,7 @@ public partial class Megaton : Node3D
 				Basis rX = new Basis(new Vector3(1, 0, 0), -req.Rotation.X);
 				Basis rY = new Basis(new Vector3(0, 1, 0), -req.Rotation.Y);
 				Basis rZ = new Basis(new Vector3(0, 0, 1), -req.Rotation.Z);
-				Basis fo3Rot = rZ * rY * rX;
+				Basis fo3Rot = rX * rY * rZ;
 				Basis toEngine = new Basis(new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
 				Basis engineRot = toEngine * fo3Rot * toEngine.Inverse();
 				var basis = engineRot.Scaled(Vector3.One * req.Scale);
@@ -2006,7 +2006,7 @@ public partial class Megaton : Node3D
 				Basis rX = new Basis(new Vector3(1, 0, 0), -req.Rotation.X);
 				Basis rY = new Basis(new Vector3(0, 1, 0), -req.Rotation.Y);
 				Basis rZ = new Basis(new Vector3(0, 0, 1), -req.Rotation.Z);
-				Basis fo3Rot = rZ * rY * rX;
+				Basis fo3Rot = rX * rY * rZ;
 				Basis toEngine = new Basis(new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
 				Basis engineRot = toEngine * fo3Rot * toEngine.Inverse();
 				var basis = engineRot.Scaled(Vector3.One * req.Scale);
@@ -2045,7 +2045,7 @@ public partial class Megaton : Node3D
 			Basis rX = new Basis(new Vector3(1, 0, 0), -req.Rotation.X);
 			Basis rY = new Basis(new Vector3(0, 1, 0), -req.Rotation.Y);
 			Basis rZ = new Basis(new Vector3(0, 0, 1), -req.Rotation.Z);
-			Basis fo3Rot = rZ * rY * rX;
+			Basis fo3Rot = rX * rY * rZ;
 			Basis toEngine = new Basis(new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
 			Basis engineRot = toEngine * fo3Rot * toEngine.Inverse();
 			var basis = engineRot.Scaled(Vector3.One * req.Scale);
