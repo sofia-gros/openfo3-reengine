@@ -141,17 +141,18 @@ public partial class Megaton : Node3D
 	{
 		if (!_initialized) return;
 
+		// ロード中やメニュー表示時（_inGame=false）でもアセットキューは常にデキューしてシーンに追加する
+		int maxPerFrame = PerformanceSettings.MaxInstancesPerFrame;
+		for (int i = 0; i < maxPerFrame && _instantiateQueue.TryDequeue(out var req); i++)
+		{
+			CreateAndAddInstance(req);
+		}
+
 		if (!_inGame)
 		{
 			UpdateDebugOverlay();
 			_frameCount++;
 			return;
-		}
-
-		int maxPerFrame = PerformanceSettings.MaxInstancesPerFrame;
-		for (int i = 0; i < maxPerFrame && _instantiateQueue.TryDequeue(out var req); i++)
-		{
-			CreateAndAddInstance(req);
 		}
 
 		if (_hud != null && _currentWorldName != null)
@@ -511,7 +512,7 @@ public partial class Megaton : Node3D
 		GD.Print("[Megaton] Intro sequence started");
 	}
 
-	private void OnIntroComplete(string playerName, int[] specialValues, bool isMale)
+	private async void OnIntroComplete(string playerName, int[] specialValues, bool isMale)
 	{
 		GD.Print($"[Megaton] Intro complete for {playerName}. Loading Capital Wasteland...");
 
@@ -533,7 +534,7 @@ public partial class Megaton : Node3D
 		if (worldName != null)
 		{
 			GD.Print($"[Megaton] Loading world: {worldName}");
-			_ = LoadWorldAsync(worldName);
+			await LoadWorldAsync(worldName);
 		}
 
 		CreateHud();
@@ -553,7 +554,7 @@ public partial class Megaton : Node3D
 		GD.Print($"[Megaton] Character: {playerName}, Male={isMale}, SPECIAL=[{string.Join(",", specialValues)}]");
 	}
 
-	private void LoadLastSaveGame()
+	private async void LoadLastSaveGame()
 	{
 		string targetWorld = GamePaths.GetTargetWorld();
 		if (!_worldDataByName.ContainsKey(targetWorld))
@@ -567,7 +568,7 @@ public partial class Megaton : Node3D
 		GD.Print($"[Megaton] Loading world: {targetWorld}");
 
 		if (targetWorld != null)
-			_ = LoadWorldAsync(targetWorld);
+			await LoadWorldAsync(targetWorld);
 
 		CreateHud();
 		CreatePlayer(new Vector3(0, 20, 0));

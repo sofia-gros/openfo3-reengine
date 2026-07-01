@@ -40,6 +40,10 @@ namespace OpenFo3.Player
             _currentHealth = MaxHealth;
             _currentAp = MaxActionPoints;
 
+            // 明示的に衝突レイヤーとマスクを設定 (1: 地形および静的・動的オブジェクトと衝突させる)
+            CollisionLayer = 1;
+            CollisionMask = 1;
+
             // ── コリジョン（必須: ないと地面と衝突せず奈落落下する） ──
             var colShape = GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
             if (colShape == null)
@@ -236,6 +240,14 @@ namespace OpenFo3.Player
 
             Velocity = velocity;
             MoveAndSlide();
+
+            // ── 落下防止のセーフティガード（地形ロードの遅れ等によるすり抜け防止） ──
+            if (GlobalPosition.Y < -50f)
+            {
+                GD.PrintErr($"[PlayerController] Fall detected (Y={GlobalPosition.Y}). Safety teleporting player to Vault101 entry.");
+                GlobalPosition = new Vector3(156f, 44f, -58f); // Vault 101の開始地点
+                Velocity = Vector3.Zero;
+            }
 
             _weapon?.UpdateBob(dt, direction.LengthSquared() > 0.01f && IsOnFloor());
 
