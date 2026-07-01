@@ -252,18 +252,18 @@ namespace OpenFo3.Game
 
         private bool CheckItem(string itemName, int count)
         {
-            GD.Print($"[Crafting] Check '{itemName}' x{count} - TODO: connect to inventory");
+            // GD.Print($"[Crafting] Check '{itemName}' x{count} - TODO: connect to inventory");
             return true;
         }
 
         private void ConsumeItem(string itemName, int count)
         {
-            GD.Print($"[Crafting] Consumed '{itemName}' x{count}");
+            // GD.Print($"[Crafting] Consumed '{itemName}' x{count}");
         }
 
         private void AddItem(string itemName, int count)
         {
-            GD.Print($"[Crafting] Added '{itemName}' x{count}");
+            // GD.Print($"[Crafting] Added '{itemName}' x{count}");
         }
     }
 }

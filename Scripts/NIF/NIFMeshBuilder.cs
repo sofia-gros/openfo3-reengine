@@ -288,12 +288,12 @@ namespace OpenFo3.NIF
                 int surfaceIdx = mesh.GetSurfaceCount() - 1;
                 if (!string.IsNullOrEmpty(surface.TexturePath))
                 {
-                    GD.Print($"[NIFMeshBuilder] Setting surface {surfaceIdx} name to: '{surface.TexturePath}'");
+                    // GD.Print($"[NIFMeshBuilder] Setting surface {surfaceIdx} name to: '{surface.TexturePath}'");
                     mesh.SurfaceSetName(surfaceIdx, surface.TexturePath);
                 }
                 else
                 {
-                    GD.Print($"[NIFMeshBuilder] Surface {surfaceIdx} has no texture path.");
+                    // GD.Print($"[NIFMeshBuilder] Surface {surfaceIdx} has no texture path.");
                 }
             }
 
@@ -492,26 +492,59 @@ namespace OpenFo3.NIF
                         {
                             string texPath = node.ShaderInfo?.TexturePaths != null && node.ShaderInfo.TexturePaths.Length > 0 ? node.ShaderInfo.TexturePaths[0] : null;
 
-                            if (node.SkinInstanceIndex != -1 &&
-                                nif.SkinData.SkinInstances.ContainsKey(blockIdx))
+                            // Filter out Bethesda editor markers and gore/dismemberment parts
+                            bool isEditorMarker = false;
+                            if (node.Name != null && (
+                                node.Name.IndexOf("Marker", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                                node.Name.IndexOf("Editor", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                node.Name.IndexOf("Camera", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                node.Name.IndexOf("Collision", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                node.Name.IndexOf("BoundingBox", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                node.Name.IndexOf("Gore", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                node.Name.IndexOf("Meat", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                node.Name.IndexOf("Sever", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                node.Name.IndexOf("Cap", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                node.Name.IndexOf("Dismember", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                node.Name.IndexOf("Blood", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                node.Name.IndexOf("Wound", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                node.Name.IndexOf("Stump", StringComparison.OrdinalIgnoreCase) >= 0))
                             {
-                                // Skinned geometry: store separately for post-processing
-                                geom.SkinnedSurfaces.Add(new SkinnedSurfaceData
-                                {
-                                    Vertices = verts,
-                                    UVs = uvs,
-                                    Indices = inds,
-                                    VertexColors = vcols,
-                                    Transform = globalTransform,
-                                    TexturePath = texPath,
-                                    ShaderInfo = node.ShaderInfo,
-                                    AlphaInfo = node.AlphaInfo,
-                                    GeometryNifIndex = blockIdx,
-                                });
+                                isEditorMarker = true;
                             }
-                            else
+                            if (texPath != null && (
+                                texPath.IndexOf("editor", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                                texPath.IndexOf("marker", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                texPath.IndexOf("blood", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                texPath.IndexOf("gore", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                texPath.IndexOf("meat", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                texPath.IndexOf("wound", StringComparison.OrdinalIgnoreCase) >= 0))
                             {
-                                geom.Surfaces.Add((verts, uvs, inds, globalTransform, texPath, node.ShaderInfo, node.AlphaInfo, vcols));
+                                isEditorMarker = true;
+                            }
+
+                            if (!isEditorMarker)
+                            {
+                                if (node.SkinInstanceIndex != -1 &&
+                                    nif.SkinData.SkinInstances.ContainsKey(blockIdx))
+                                {
+                                    // Skinned geometry: store separately for post-processing
+                                    geom.SkinnedSurfaces.Add(new SkinnedSurfaceData
+                                    {
+                                        Vertices = verts,
+                                        UVs = uvs,
+                                        Indices = inds,
+                                        VertexColors = vcols,
+                                        Transform = globalTransform,
+                                        TexturePath = texPath,
+                                        ShaderInfo = node.ShaderInfo,
+                                        AlphaInfo = node.AlphaInfo,
+                                        GeometryNifIndex = blockIdx,
+                                    });
+                                }
+                                else
+                                {
+                                    geom.Surfaces.Add((verts, uvs, inds, globalTransform, texPath, node.ShaderInfo, node.AlphaInfo, vcols));
+                                }
                             }
                         }
                     }

@@ -111,7 +111,7 @@ namespace OpenFo3.Modding
 					}
 
 					_plugins.Add(plugin);
-					GD.Print($"[ModManager] Found plugin: {fileName} ({(plugin.IsMaster ? "ESM" : plugin.IsLight ? "ESL" : "ESP")})");
+					// GD.Print($"[ModManager] Found plugin: {fileName} ({(plugin.IsMaster ? "ESM" : plugin.IsLight ? "ESL" : "ESP")})");
 				}
 			}
 

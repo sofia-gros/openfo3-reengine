@@ -31,7 +31,7 @@ namespace OpenFo3.World
         {
             _esm = esm;
             _navmIndex = esm.BuildFormIdIndex(new[] { "NAVM" });
-            GD.Print($"[NavMeshBuilder] NAVM index: {_navmIndex.Count} entries");
+            // GD.Print($"[NavMeshBuilder] NAVM index: {_navmIndex.Count} entries");
         }
 
         public List<NavMeshData> GetNavMeshesForWorld(uint worldFormId)
@@ -45,7 +45,7 @@ namespace OpenFo3.World
                 if (nav != null) result.Add(nav);
             }
 
-            GD.Print($"[NavMeshBuilder] World 0x{worldFormId:X8}: {result.Count} navmeshes");
+            // GD.Print($"[NavMeshBuilder] World 0x{worldFormId:X8}: {result.Count} navmeshes");
             return result;
         }
 
@@ -60,7 +60,7 @@ namespace OpenFo3.World
                 if (nav != null) result.Add(nav);
             }
 
-            GD.Print($"[NavMeshBuilder] Cell 0x{cellFormId:X8}: {result.Count} navmeshes");
+            // GD.Print($"[NavMeshBuilder] Cell 0x{cellFormId:X8}: {result.Count} navmeshes");
             return result;
         }
 
@@ -190,7 +190,7 @@ namespace OpenFo3.World
                 navMesh.AddPolygon(new int[] { tri.Vertex1, tri.Vertex2, tri.Vertex3 });
             }
 
-            GD.Print($"[NavMeshBuilder] Built navmesh: {numVerts} verts, {navData.Triangles.Length} tris");
+            // GD.Print($"[NavMeshBuilder] Built navmesh: {numVerts} verts, {navData.Triangles.Length} tris");
             return navMesh;
         }
     }

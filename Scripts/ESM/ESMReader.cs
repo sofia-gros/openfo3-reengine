@@ -54,7 +54,7 @@ namespace OpenFo3.ESM
             _stream.Position = 0;
             TraverseNodes(_stream.Length, targetSet, index, 0, 0);
             
-            GD.Print($"[ESMReader] BuildFormIdIndex({string.Join(",", targetTypes)}): {index.Count} found, {_totalSeen} total nodes seen");
+            // GD.Print($"[ESMReader] BuildFormIdIndex({string.Join(",", targetTypes)}): {index.Count} found, {_totalSeen} total nodes seen");
             return index;
         }
 
@@ -237,7 +237,7 @@ namespace OpenFo3.ESM
             _cellSeenInWorld = 0;
             _landSeenInWorld = 0;
 
-            GD.Print($"[ESMReader] BuildLandCoordinateMap: world=0x{worldFormId:X8} landIndex={landIndex.Count} cellIndex={cellIndex.Count}");
+            // GD.Print($"[ESMReader] BuildLandCoordinateMap: world=0x{worldFormId:X8} landIndex={landIndex.Count} cellIndex={cellIndex.Count}");
 
             lock (_lock)
             {
@@ -245,12 +245,12 @@ namespace OpenFo3.ESM
                 TraverseForLandCoords(_stream.Length, landIndex, cellIndex, worldFormId, coordMap, 0, 0, 0);
             }
 
-            GD.Print($"[ESMReader] BuildLandCoordinateMap result: {coordMap.Count} LANDs mapped for world 0x{worldFormId:X8} (cellsSeen={_cellSeenInWorld} landsSeen={_landSeenInWorld})");
+            // GD.Print($"[ESMReader] BuildLandCoordinateMap result: {coordMap.Count} LANDs mapped for world 0x{worldFormId:X8} (cellsSeen={_cellSeenInWorld} landsSeen={_landSeenInWorld})");
             foreach (var kvp in coordMap)
             {
                 uint landFormId = kvp.Key;
                 var entry = landIndex[landFormId];
-                GD.Print($"[CoordMap] LAND 0x{landFormId:X8} CellFormId=0x{entry.CellFormId:X8} -> cell({kvp.Value.Item1},{kvp.Value.Item2})");
+                // GD.Print($"[CoordMap] LAND 0x{landFormId:X8} CellFormId=0x{entry.CellFormId:X8} -> cell({kvp.Value.Item1},{kvp.Value.Item2})");
             }
             return coordMap;
         }
@@ -299,7 +299,7 @@ namespace OpenFo3.ESM
                         }
                         else if (currentWorld == worldFormId)
                         {
-                            GD.Print($"[GRUP] CellChildren label=0x{label:X8} NOT FOUND in cellIndex for world 0x{worldFormId:X8}");
+                            // GD.Print($"[GRUP] CellChildren label=0x{label:X8} NOT FOUND in cellIndex for world 0x{worldFormId:X8}");
                         }
                         _stream.Position = savedPos;
                     }

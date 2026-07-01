@@ -72,9 +72,9 @@ public static class GamePaths
         _dataPath = Path.Combine(_fallout3Root, "Data");
         _esmPath = Path.Combine(_dataPath, "Fallout3.esm");
 
-        GD.Print($"[GamePaths] Root: {_fallout3Root}");
-        GD.Print($"[GamePaths] Data: {_dataPath}");
-        GD.Print($"[GamePaths] ESM:  {_esmPath}");
+        // GD.Print($"[GamePaths] Root: {_fallout3Root}");
+        // GD.Print($"[GamePaths] Data: {_dataPath}");
+        // GD.Print($"[GamePaths] ESM:  {_esmPath}");
 
         // Read BSA file list from config
         var bsaList = new System.Collections.Generic.List<string>();
@@ -96,11 +96,11 @@ public static class GamePaths
                             if (File.Exists(fullPath))
                             {
                                 bsaList.Add(fullPath);
-                                GD.Print($"[GamePaths] Registered BSA: {fileName}");
+                                // GD.Print($"[GamePaths] Registered BSA: {fileName}");
                             }
                             else
                             {
-                                GD.Print($"[GamePaths] BSA not found, skipping: {fileName}");
+                                // GD.Print($"[GamePaths] BSA not found, skipping: {fileName}");
                             }
                         }
                     }

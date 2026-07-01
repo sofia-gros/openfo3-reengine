@@ -34,7 +34,7 @@ namespace OpenFo3.World
             _esm = esm;
             _bsaReaders = bsaReaders;
             _sounIndex = esm.BuildFormIdIndex(new[] { "SOUN" });
-            GD.Print($"[AudioManager] SOUN index: {_sounIndex.Count} entries");
+            // GD.Print($"[AudioManager] SOUN index: {_sounIndex.Count} entries");
         }
 
         public SoundRecordData ParseSoundRecord(uint formId)
@@ -154,7 +154,7 @@ namespace OpenFo3.World
                 byte[] decoded = XWmaDecoder.DecodeToWav(data);
                 if (decoded == null)
                 {
-                    GD.Print($"[AudioManager] Failed to decode xWMA for '{path}'");
+                    // GD.Print($"[AudioManager] Failed to decode xWMA for '{path}'");
                     return null;
                 }
                 return new AudioStreamWav { Data = decoded };
@@ -162,11 +162,11 @@ namespace OpenFo3.World
 
             if (ext == ".ogg" || ext == ".mp3")
             {
-                GD.Print($"[AudioManager] Unsupported format '{ext}' for '{path}': OGG/MP3 not supported via byte array in Redot 26.1");
+                // GD.Print($"[AudioManager] Unsupported format '{ext}' for '{path}': OGG/MP3 not supported via byte array in Redot 26.1");
                 return null;
             }
 
-            GD.Print($"[AudioManager] Unknown audio format '{ext}' for '{path}'");
+            // GD.Print($"[AudioManager] Unknown audio format '{ext}' for '{path}'");
             return null;
         }
 

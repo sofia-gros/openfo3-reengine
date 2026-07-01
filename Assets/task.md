@@ -17,6 +17,9 @@ AIは開発を進める際、以下のルールを厳格に遵守してくださ
 
 - [x] **プラン1: プレイヤーのコリジョンと実操作キャラクターの置き換え (#21)**
   - PlayerController.cs に CollisionLayer/Mask (1) を明示、落下防止ガード実装済み。さらに、NIFからキャラクター（meshes/characters/_male/skeleton.nif）をロードし、オリジナルのFallout3と同じ動きができるように操作キャラの本格実装を追加完了。PhysicsFrame待機による落下防止も実装済み。
+- [/] **プラン1.5: プレイヤーの可視化と本格アニメーション拡張基盤の構築**
+  - `skeleton.nif` に体や服（例：`outfitm.nif`, `hands.nif`）を `MeshInstance3D` としてアタッチし、透明化バグを解消する。
+  - 将来的に Fallout 3 の `.kf` アニメーションデータを `Skeleton3D` にアタッチして再生できるよう、`PlayerController` または拡張可能なクラスとしてアニメーションシステムを設計する。
 - [x] **プラン2: ボーンウェイト制約の代替実装によるアニメーション再生 (#13, #5.2)**
   - Redot API（SurfaceTool）の制約を回避するため、NIFMeshBuilder.cs にて ArrayMesh に直接 Bones/Weights の配列を注入する代替実装がすでに機能していることを検証。KFAnimationLoader から Godot Animation のトラックプレフィックスと Skeleton3D のノード階層が正しく一致していることを確認完了。
 - [x] **プラン3: 建築物の回転・向き不整合バグの解析と修正 (#12) ※最難関・ディープデバッグ**

@@ -115,7 +115,7 @@ namespace OpenFo3.Player
         {
             _currentStage = stage;
             ApplyStageCollision();
-            GD.Print($"[ChildController] Stage set to {stage}");
+            // GD.Print($"[ChildController] Stage set to {stage}");
         }
 
         private void ApplyStageCollision()

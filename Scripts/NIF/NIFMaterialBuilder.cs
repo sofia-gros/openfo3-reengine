@@ -381,8 +381,16 @@ namespace OpenFo3.NIF
                     var img = tex.GetImage();
                     if (img != null)
                     {
-                        var sample = img.GetPixel(0, 0);
-                        mat.SubsurfScatterTransmittanceColor = sample;
+                        if (img.IsCompressed())
+                        {
+                            img.Decompress();
+                        }
+                        
+                        if (!img.IsCompressed() && img.GetWidth() > 0 && img.GetHeight() > 0)
+                        {
+                            var sample = img.GetPixel(0, 0);
+                            mat.SubsurfScatterTransmittanceColor = sample;
+                        }
                     }
                 }
             }

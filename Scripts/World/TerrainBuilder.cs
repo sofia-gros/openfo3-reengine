@@ -38,7 +38,7 @@ namespace OpenFo3.World
             _ltexIndex = esm.BuildFormIdIndex(new[] { "LTEX" });
             _cellIndex = esm.BuildFormIdIndex(new[] { "CELL" });
             _txstIndex = esm.BuildFormIdIndex(new[] { "TXST" });
-            GD.Print($"[TerrainBuilder] LTEX index: {_ltexIndex.Count} entries, TXST index: {_txstIndex.Count} entries");
+            // GD.Print($"[TerrainBuilder] LTEX index: {_ltexIndex.Count} entries, TXST index: {_txstIndex.Count} entries");
         }
 
         public void SetLandIndex(Dictionary<uint, RecordEntry> masterIndex)
@@ -67,7 +67,7 @@ namespace OpenFo3.World
                             if (tx00 != null)
                             {
                                 string path = Encoding.ASCII.GetString(tx00.Data).TrimEnd('\0').Replace('\\', '/');
-                                GD.Print($"[TerrainBuilder] Resolved 0x{texFormId:X8} -> {path}");
+                                // GD.Print($"[TerrainBuilder] Resolved 0x{texFormId:X8} -> {path}");
                                 return path;
                             }
                         }
@@ -83,17 +83,17 @@ namespace OpenFo3.World
                     if (tx00 != null)
                     {
                         string path = Encoding.ASCII.GetString(tx00.Data).TrimEnd('\0').Replace('\\', '/');
-                        GD.Print($"[TerrainBuilder] Resolved 0x{texFormId:X8} directly as TXST -> {path}");
+                        // GD.Print($"[TerrainBuilder] Resolved 0x{texFormId:X8} directly as TXST -> {path}");
                         return path;
                     }
                 }
 
-                GD.Print($"[TerrainBuilder] Could not resolve 0x{texFormId:X8} (not in LTEX or TXST)");
+                // GD.Print($"[TerrainBuilder] Could not resolve 0x{texFormId:X8} (not in LTEX or TXST)");
                 return null;
             }
             catch (Exception ex)
             {
-                GD.Print($"[TerrainBuilder] ResolveTexturePath exception for 0x{texFormId:X8}: {ex.Message}");
+                // GD.Print($"[TerrainBuilder] ResolveTexturePath exception for 0x{texFormId:X8}: {ex.Message}");
                 return null;
             }
         }
@@ -116,7 +116,7 @@ namespace OpenFo3.World
             var coveredCells = new HashSet<(int, int)>();
             var landCells = new List<uint>();
 
-            GD.Print($"[TerrainBuilder] Looking for LAND records in world 0x{worldFormId:X8}");
+            // GD.Print($"[TerrainBuilder] Looking for LAND records in world 0x{worldFormId:X8}");
 
             foreach (var kvp in _landIndex)
             {
@@ -129,7 +129,7 @@ namespace OpenFo3.World
             // Build LAND→coordinate map by scanning the WRLD's children in order.
             // Uses cellIndex to resolve coordinates inside Cell Children GRUPs.
             var landCoords = _esm.BuildLandCoordinateMap(_landIndex, _cellIndex, worldFormId);
-            GD.Print($"[TerrainBuilder] Found {landCells.Count} LAND records in world, {landCoords.Count} have cell coords");
+            // GD.Print($"[TerrainBuilder] Found {landCells.Count} LAND records in world, {landCoords.Count} have cell coords");
 
             // Cross-check: compare BuildLandCoordinateMap results against direct XCLC parsing
             foreach (uint landFormId in landCells)
@@ -153,22 +153,22 @@ namespace OpenFo3.World
                 }
 
                 bool mismatch = simpleOk && (simpleX != coord.Item1 || simpleY != coord.Item2);
-                GD.Print($"[CrossCheck] LAND 0x{landFormId:X8}: mapCoord=({coord.Item1},{coord.Item2}) " +
-                    $"cellFormId=0x{landEntry.CellFormId:X8} simpleXCLC={(simpleOk ? $"({simpleX},{simpleY})" : "N/A(not in cellIndex)")}" +
-                    (mismatch ? "  *** MISMATCH ***" : ""));
+                // GD.Print($"[CrossCheck] LAND 0x{landFormId:X8}: mapCoord=({coord.Item1},{coord.Item2}) " +
+                //     $"cellFormId=0x{landEntry.CellFormId:X8} simpleXCLC={(simpleOk ? $"({simpleX},{simpleY})" : "N/A(not in cellIndex)")}" +
+                //     (mismatch ? "  *** MISMATCH ***" : ""));
             }
 
             foreach (uint landFormId in landCells)
             {
                 if (!_landIndex.TryGetValue(landFormId, out var landEntry))
                 {
-                    GD.Print($"[TerrainBuilder] LAND 0x{landFormId:X8} not found in index");
+                    // GD.Print($"[TerrainBuilder] LAND 0x{landFormId:X8} not found in index");
                     continue;
                 }
 
                 if (!landCoords.TryGetValue(landFormId, out var coord))
                 {
-                    GD.Print($"[TerrainBuilder] LAND 0x{landFormId:X8} has no cell coordinate mapping - skipping");
+                    // GD.Print($"[TerrainBuilder] LAND 0x{landFormId:X8} has no cell coordinate mapping - skipping");
                     continue;
                 }
                 int cellX = coord.Item1;
@@ -180,11 +180,11 @@ namespace OpenFo3.World
 				if (quadTiles != null && quadTiles.Count > 0)
 				{
 					tiles.AddRange(quadTiles);
-					GD.Print($"[TerrainBuilder] Built {quadTiles.Count} quadrant tiles for cell ({cellX}, {cellY})");
+					// GD.Print($"[TerrainBuilder] Built {quadTiles.Count} quadrant tiles for cell ({cellX}, {cellY})");
 				}
 				else
 				{
-					GD.Print($"[TerrainBuilder] BuildQuadrantTiles returned null/empty for cell ({cellX}, {cellY})");
+					// GD.Print($"[TerrainBuilder] BuildQuadrantTiles returned null/empty for cell ({cellX}, {cellY})");
 				}
             }
 
@@ -222,7 +222,7 @@ namespace OpenFo3.World
                 int totalFill = (fillMaxX - fillMinX + 1) * (fillMaxY - fillMinY + 1);
                 if (totalFill > 3000)
                 {
-                    GD.Print($"[TerrainBuilder] WARNING: {totalFill} flat tiles exceeds 3000 cap — using padding=2");
+                    // GD.Print($"[TerrainBuilder] WARNING: {totalFill} flat tiles exceeds 3000 cap — using padding=2");
                     padding = 2;
                     fillMinX = Math.Max(landMinX - padding, fillCellMinX);
                     fillMinY = Math.Max(landMinY - padding, fillCellMinY);
@@ -246,7 +246,7 @@ namespace OpenFo3.World
                         }
                     }
                 }
-                GD.Print($"[TerrainBuilder] Built {flatBuilt} gap-fill flat tiles around {coveredCells.Count} LAND tiles");
+                // GD.Print($"[TerrainBuilder] Built {flatBuilt} gap-fill flat tiles around {coveredCells.Count} LAND tiles");
             }
 
             return tiles;
@@ -260,29 +260,29 @@ namespace OpenFo3.World
                 // LAND formId == CELL formId in FO3. Read XCLC from the CELL record.
                 if (!_cellIndex.TryGetValue(formId, out var entry))
                 {
-                    GD.Print($"[TerrainBuilder] CELL not found in index for formId 0x{formId:X8}");
+                    // GD.Print($"[TerrainBuilder] CELL not found in index for formId 0x{formId:X8}");
                     return false;
                 }
                 var record = _esm.GetRecordAtOffset(entry.Offset);
                 var subs = _esm.GetSubRecords(record);
 
-                GD.Print($"[TerrainBuilder] CELL record at 0x{entry.Offset:X8}, type={record.Type}, subCount={subs.Count}");
+                // GD.Print($"[TerrainBuilder] CELL record at 0x{entry.Offset:X8}, type={record.Type}, subCount={subs.Count}");
 
                 var xclc = subs.FirstOrDefault(s => s.Type == "XCLC");
                 if (xclc == null || xclc.Data.Length < 8)
                 {
-                    GD.Print($"[TerrainBuilder] No XCLC found in CELL 0x{formId:X8}");
+                    // GD.Print($"[TerrainBuilder] No XCLC found in CELL 0x{formId:X8}");
                     return false;
                 }
 
                 cellX = BitConverter.ToInt32(xclc.Data, 0);
                 cellY = BitConverter.ToInt32(xclc.Data, 4);
-                GD.Print($"[TerrainBuilder] CELL 0x{formId:X8} XCLC=({cellX}, {cellY})");
+                // GD.Print($"[TerrainBuilder] CELL 0x{formId:X8} XCLC=({cellX}, {cellY})");
                 return true;
             }
             catch (Exception ex)
             {
-                GD.Print($"[TerrainBuilder] TryGetCellCoord exception for 0x{formId:X8}: {ex.Message}");
+                // GD.Print($"[TerrainBuilder] TryGetCellCoord exception for 0x{formId:X8}: {ex.Message}");
                 return false;
             }
         }
@@ -296,7 +296,7 @@ namespace OpenFo3.World
 		        var record = _esm.GetRecordAtOffset(entry.Offset);
 		        if (record.Type != "LAND")
 		        {
-		            GD.Print($"[TerrainBuilder] WARNING: LAND 0x{landFormId:X8} record type is '{record.Type}' not 'LAND' (offset=0x{entry.Offset:X8})");
+		            // GD.Print($"[TerrainBuilder] WARNING: LAND 0x{landFormId:X8} record type is '{record.Type}' not 'LAND' (offset=0x{entry.Offset:X8})");
 		        }
 		        var subs = _esm.GetSubRecords(record);
 
@@ -320,7 +320,7 @@ namespace OpenFo3.World
 		        var btxtures = subs.Where(s => s.Type == "BTXT").ToArray();
 		        if (btxtures.Length == 0)
 		        {
-		            GD.Print($"[TerrainBuilder] LAND 0x{landFormId:X8} cell({cellX},{cellY}) has no BTXT — skipping");
+		            // GD.Print($"[TerrainBuilder] LAND 0x{landFormId:X8} cell({cellX},{cellY}) has no BTXT — skipping");
 		            return null;
 		        }
 
@@ -338,14 +338,14 @@ namespace OpenFo3.World
 		                if (quadTexPaths[quad] != null)
 		                {
 		                    hasAnyTexture = true;
-		                    GD.Print($"[TerrainBuilder] BTXT quad={quad} tex=0x{texFormId:X8} -> {quadTexPaths[quad]}");
+		                    // GD.Print($"[TerrainBuilder] BTXT quad={quad} tex=0x{texFormId:X8} -> {quadTexPaths[quad]}");
 		                }
 		            }
 		        }
 
 		        if (!hasAnyTexture)
 		        {
-		            GD.Print($"[TerrainBuilder] LAND 0x{landFormId:X8} cell({cellX},{cellY}) BTXT resolution failed — using fallback on all quadrants");
+		            // GD.Print($"[TerrainBuilder] LAND 0x{landFormId:X8} cell({cellX},{cellY}) BTXT resolution failed — using fallback on all quadrants");
 		            for (int i = 0; i < 4; i++)
 		                quadTexPaths[i] = "Landscape/GroundLitterHeavy01.dds";
 		        }
@@ -429,10 +429,10 @@ namespace OpenFo3.World
 		                if (h < minH) minH = h;
 		                if (h > maxH) maxH = h;
 		            }
-		        GD.Print($"[TerrainBuilder] LAND 0x{landFormId:X8} cell({cellX},{cellY})" +
-		            $" landH={defaultLandHeight:F1} baseHeight={baseHeight:F1}" +
-		            $" rawH=[{minH:F1}, {maxH:F1}] (Δ={maxH - minH:F1})" +
-		            $" quadrants=[{quadTexPaths[0] ?? "none"},{quadTexPaths[1] ?? "none"},{quadTexPaths[2] ?? "none"},{quadTexPaths[3] ?? "none"}]");
+		        // GD.Print($"[TerrainBuilder] LAND 0x{landFormId:X8} cell({cellX},{cellY})" +
+		        //     $" landH={defaultLandHeight:F1} baseHeight={baseHeight:F1}" +
+		        //     $" rawH=[{minH:F1}, {maxH:F1}] (Δ={maxH - minH:F1})" +
+		        //     $" quadrants=[{quadTexPaths[0] ?? "none"},{quadTexPaths[1] ?? "none"},{quadTexPaths[2] ?? "none"},{quadTexPaths[3] ?? "none"}]");
 
 		        // Build collision shape for the full cell
 		        var collisionShape = BuildCellCollision(heights, cellX, cellY, megatonCenter);

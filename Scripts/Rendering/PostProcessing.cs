@@ -132,7 +132,7 @@ namespace OpenFo3.Rendering
             // === MOTION BLUR (not available in Redot 26.1 Environment API) ===
             if (EnableMotionBlur)
             {
-                GD.Print("[PostProcessing] Motion blur not supported in Redot 26.1 Environment. Skipping.");
+                // GD.Print("[PostProcessing] Motion blur not supported in Redot 26.1 Environment. Skipping.");
             }
 
             // === VOLUMETRIC FOG ===
@@ -157,7 +157,7 @@ namespace OpenFo3.Rendering
             _envResource.AdjustmentSaturation = 0.85f;
             _envResource.AdjustmentColorCorrection = null;
 
-            GD.Print("[PostProcessing] Applied all effects");
+            // GD.Print("[PostProcessing] Applied all effects");
         }
 
         public void SetBloomIntensity(float intensity)
@@ -215,7 +215,7 @@ namespace OpenFo3.Rendering
                     break;
                 case "motionblur":
                     EnableMotionBlur = !EnableMotionBlur;
-                    GD.Print("[PostProcessing] Motion blur toggled but not supported in Redot 26.1");
+                    // GD.Print("[PostProcessing] Motion blur toggled but not supported in Redot 26.1");
                     break;
                 case "fog":
                     EnableVolumetricFog = !EnableVolumetricFog;
@@ -226,7 +226,7 @@ namespace OpenFo3.Rendering
                     if (_envResource != null) _envResource.AdjustmentEnabled = EnableColorGrading;
                     break;
             }
-            GD.Print($"[PostProcessing] Toggled {name}");
+            // GD.Print($"[PostProcessing] Toggled {name}");
         }
     }
 }

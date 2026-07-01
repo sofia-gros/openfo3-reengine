@@ -328,19 +328,19 @@ public partial class Megaton : Node3D
 			if (key.Keycode == Key.C && key.CtrlPressed)
 			{
 				_debugShowCollision = !_debugShowCollision;
-				GD.Print($"[Megaton] Debug collision: {_debugShowCollision}");
+// GD.Print($"[Megaton] Debug collision: {_debugShowCollision}");
 				UpdateDebugVisualizationNow();
 			}
 			if (key.Keycode == Key.N && key.CtrlPressed)
 			{
 				_debugShowNavigation = !_debugShowNavigation;
-				GD.Print($"[Megaton] Debug navigation: {_debugShowNavigation}");
+// GD.Print($"[Megaton] Debug navigation: {_debugShowNavigation}");
 				UpdateDebugVisualizationNow();
 			}
 			if (key.Keycode == Key.P && key.CtrlPressed)
 			{
 				_debugShowPaths = !_debugShowPaths;
-				GD.Print($"[Megaton] Debug paths: {_debugShowPaths}");
+// GD.Print($"[Megaton] Debug paths: {_debugShowPaths}");
 				UpdateDebugVisualizationNow();
 			}
 		}
@@ -424,16 +424,23 @@ public partial class Megaton : Node3D
 		_mainMenu.ShowMenu();
 
 		Input.MouseMode = Input.MouseModeEnum.Visible;
-		GD.Print("[Megaton] Main menu displayed");
+// GD.Print("[Megaton] Main menu displayed");
 	}
 
 	private async void OnNewGame()
 	{
-		GD.Print("[Megaton] New Game selected. Loading Vault 101...");
+// GD.Print("[Megaton] New Game selected. Loading Vault 101...");
 		_mainMenu?.HideMenu();
 
-		string cellName = "Vault101a";
-		_currentWorldName = cellName;
+		string worldName = "Megaton"; 
+		if (!_worldDataByName.ContainsKey(worldName))
+		{
+			// Try alternative names if "Megaton" is not found in WRLD records
+			if (_worldDataByName.ContainsKey("MegatonWorld")) worldName = "MegatonWorld";
+			else if (_worldDataByName.ContainsKey("Wasteland")) worldName = "Wasteland";
+		}
+		
+		_currentWorldName = worldName;
 
 		CreateHud();
 
@@ -449,7 +456,7 @@ public partial class Megaton : Node3D
 			canvas.AddChild(fadeRect);
 		}
 
-		await LoadCellAsync(cellName);
+		await LoadWorldAsync(worldName);
 
 		// Wait for asset instantiation queue to clear (up to 3 seconds)
 		for (int i = 0; i < 180; i++)
@@ -462,13 +469,9 @@ public partial class Megaton : Node3D
 		await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
 		await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
 
-		// Spawn player inside Vault 101
-		// Vault101aのプレイヤー開始地点: FO3内部座標から変換
-		// Vault101a セルの中央付近（PlayerStartMarker位置）
-		// FO3 DATA: X≈-15000, Y≈15000, Z≈-175 → Godot: X=-225, Y=-2.625, Z=-225
-		// セルが原点ローカル座標（インテリアセルはCenter減算なし）なので WorldScale のみ適用
-		Vector3 vault101StartPos = GetVault101StartPosition();
-		CreatePlayer(vault101StartPos);
+		// Spawn player inside Megaton
+		Vector3 startPos = GetMegatonStartPosition();
+		CreatePlayer(startPos);
 
 		// Fade in
 		if (fadeRect != null)
@@ -480,31 +483,31 @@ public partial class Megaton : Node3D
 
 		_inGame = true;
 		Input.MouseMode = Input.MouseModeEnum.Captured;
-		GD.Print("[Megaton] Game started inside Vault 101.");
+// GD.Print("[Megaton] Game started inside Vault 101.");
 	}
 
 	private void OnContinueGame()
 	{
-		GD.Print("[Megaton] Continue selected");
+// GD.Print("[Megaton] Continue selected");
 		_mainMenu.HideMenu();
 		LoadLastSaveGame();
 	}
 
 	private void OnLoadGame()
 	{
-		GD.Print("[Megaton] Load selected");
+// GD.Print("[Megaton] Load selected");
 		_mainMenu.HideMenu();
 		LoadLastSaveGame();
 	}
 
 	private void OnSettings()
 	{
-		GD.Print("[Megaton] Settings selected");
+// GD.Print("[Megaton] Settings selected");
 	}
 
 	private void OnQuit()
 	{
-		GD.Print("[Megaton] Quit selected");
+// GD.Print("[Megaton] Quit selected");
 		GetTree().Quit();
 	}
 
@@ -519,12 +522,12 @@ public partial class Megaton : Node3D
 		AddChild(_introSequence);
 
 		_introSequence.StartIntro();
-		GD.Print("[Megaton] Intro sequence started");
+// GD.Print("[Megaton] Intro sequence started");
 	}
 
 	private async void OnIntroComplete(string playerName, int[] specialValues, bool isMale)
 	{
-		GD.Print($"[Megaton] Intro complete for {playerName}. Loading Capital Wasteland...");
+// GD.Print($"[Megaton] Intro complete for {playerName}. Loading Capital Wasteland...");
 
 		if (_introSequence != null)
 		{
@@ -543,7 +546,7 @@ public partial class Megaton : Node3D
 
 		if (worldName != null)
 		{
-			GD.Print($"[Megaton] Loading world: {worldName}");
+// GD.Print($"[Megaton] Loading world: {worldName}");
 			await LoadWorldAsync(worldName);
 		}
 
@@ -556,12 +559,12 @@ public partial class Megaton : Node3D
 		_inGame = true;
 		Input.MouseMode = Input.MouseModeEnum.Captured;
 
-		GD.Print("[Megaton] Player is now in the Capital Wasteland");
+// GD.Print("[Megaton] Player is now in the Capital Wasteland");
 	}
 
 	private void ApplyCharacterData(string playerName, int[] specialValues, bool isMale)
 	{
-		GD.Print($"[Megaton] Character: {playerName}, Male={isMale}, SPECIAL=[{string.Join(",", specialValues)}]");
+// GD.Print($"[Megaton] Character: {playerName}, Male={isMale}, SPECIAL=[{string.Join(",", specialValues)}]");
 	}
 
 	private async void LoadLastSaveGame()
@@ -575,7 +578,7 @@ public partial class Megaton : Node3D
 			targetWorld ??= _worldNameList.Count > 0 ? _worldNameList[0] : null;
 		}
 
-		GD.Print($"[Megaton] Loading world: {targetWorld}");
+// GD.Print($"[Megaton] Loading world: {targetWorld}");
 
 		if (targetWorld != null)
 			await LoadWorldAsync(targetWorld);
@@ -616,26 +619,67 @@ public partial class Megaton : Node3D
 		_player.Spawn(pos);
 
 		// ── NIF モデルとアニメーションのロードとアタッチ ──
-		string playerMeshPath = "meshes/characters/_male/skeleton.nif";
-		var mesh = GetOrBuildMesh(playerMeshPath);
-		if (_skinnedCache.TryGetValue(playerMeshPath, out var skinnedNodes) && skinnedNodes.Count > 0)
+		_player.ClearMeshes();
+
+		string outfitPath = "meshes/armor/vault101/outfitm.nif";
+		string leftHandPath = "meshes/characters/_male/lefthand.nif";
+		string rightHandPath = "meshes/characters/_male/righthand.nif";
+		string headPath = "meshes/characters/head/headhuman.nif";
+		string skelPath = "meshes/characters/_male/skeleton.nif";
+
+		foreach (var bsaPair in _meshBsaList)
 		{
-			foreach (var srcNode in skinnedNodes)
+			var outMatch = bsaPair.Files.FirstOrDefault(f => f.Path.IndexOf("outfitm.nif", StringComparison.OrdinalIgnoreCase) >= 0 && f.Path.IndexOf("vault101", StringComparison.OrdinalIgnoreCase) >= 0);
+			if (outMatch != null) outfitPath = outMatch.Path;
+			else
 			{
-				var clone = CloneNodeTree(srcNode);
-				clone.Transform = Transform3D.Identity;
-				_player.AttachSkinnedMesh(clone);
-				var meshInst = clone.FindChild("*", recursive: true) as MeshInstance3D;
-				if (meshInst != null)
-					TrackProp(meshInst, _player, pos, playerMeshPath, meshInst.Mesh as ArrayMesh, null);
-				break;
+				var fallback = bsaPair.Files.FirstOrDefault(f => f.Path.IndexOf("outfitm.nif", StringComparison.OrdinalIgnoreCase) >= 0 && f.Path.IndexOf("vaultsuitarmor", StringComparison.OrdinalIgnoreCase) >= 0);
+				if (fallback != null) outfitPath = fallback.Path;
 			}
+
+			var leftMatch = bsaPair.Files.FirstOrDefault(f => f.Path.IndexOf("lefthand.nif", StringComparison.OrdinalIgnoreCase) >= 0 && f.Path.IndexOf("_male", StringComparison.OrdinalIgnoreCase) >= 0);
+			if (leftMatch != null) leftHandPath = leftMatch.Path;
+
+			var rightMatch = bsaPair.Files.FirstOrDefault(f => f.Path.IndexOf("righthand.nif", StringComparison.OrdinalIgnoreCase) >= 0 && f.Path.IndexOf("_male", StringComparison.OrdinalIgnoreCase) >= 0);
+			if (rightMatch != null) rightHandPath = rightMatch.Path;
+
+			var headMatch = bsaPair.Files.FirstOrDefault(f => f.Path.IndexOf("headhuman.nif", StringComparison.OrdinalIgnoreCase) >= 0);
+			if (headMatch != null) headPath = headMatch.Path;
 		}
-		else if (mesh != null)
+
+		string[] playerNifs = new string[] { skelPath, outfitPath, leftHandPath, rightHandPath, headPath };
+
+		foreach (var p in playerNifs)
 		{
-			var meshInst2 = RentMeshInstance(playerMeshPath, mesh, Transform3D.Identity, _player);
-			_player.AttachSkinnedMesh(meshInst2);
-			TrackProp(meshInst2, _player, pos, playerMeshPath, mesh, null);
+			GD.Print($"[Megaton] Using Player Mesh Path: {p}");
+		}
+
+		foreach (var nifPath in playerNifs)
+		{
+			EnsureNifParsed(nifPath);
+			var mesh = GetOrBuildMesh(nifPath);
+			
+			if (_skinnedCache.TryGetValue(nifPath, out var skinnedNodes) && skinnedNodes.Count > 0)
+			{
+				foreach (var srcNode in skinnedNodes)
+				{
+					var clone = CloneNodeTree(srcNode);
+					clone.Transform = Transform3D.Identity;
+					bool isMain = (nifPath == playerNifs[0]);
+					_player.AddMeshLayer(clone, isMainSkeleton: isMain);
+					
+					var meshInst = clone.FindChild("*", recursive: true) as MeshInstance3D;
+					if (meshInst != null)
+						TrackProp(meshInst, _player, pos, nifPath, meshInst.Mesh as ArrayMesh, null);
+					break;
+				}
+			}
+			else if (mesh != null)
+			{
+				var meshInst2 = RentMeshInstance(nifPath, mesh, Transform3D.Identity, null);
+				_player.AddMeshLayer(meshInst2, isMainSkeleton: false);
+				TrackProp(meshInst2, _player, pos, nifPath, mesh, null);
+			}
 		}
 
 		List<string> playerAnims = new List<string>
@@ -643,10 +687,20 @@ public partial class Megaton : Node3D
 			"meshes/characters/_male/locomotion/forward.kf",
 			"meshes/characters/_male/idle.kf"
 		};
-		var anims = BuildAnimationsForNpc(playerMeshPath, playerAnims);
+		var anims = BuildAnimationsForNpc(playerNifs[0], playerAnims);
 		_player.LoadAnimations(anims);
 
-		GD.Print($"[Megaton] PlayerController created at {pos} with model {playerMeshPath}");
+// GD.Print($"[Megaton] PlayerController created at {pos} with models.");
+	}
+
+	/// <summary>
+	/// Megatonのプレイヤー開始位置を取得する。
+	/// </summary>
+	private Vector3 GetMegatonStartPosition()
+	{
+		// メガトンの入り口入ったところ (ユーザー確認座標: 166, 200, 275)
+		// すり抜け防止のため少し上空から落とす
+		return new Vector3(166f, 205f, 275f);
 	}
 
 	/// <summary>
@@ -656,9 +710,8 @@ public partial class Megaton : Node3D
 	/// </summary>
 	private Vector3 GetVault101StartPosition()
 	{
-		// カメラで確認したVault101a内の有効なプレイヤー開始位置
-		// Camera: (156.0, 44.0, -58.0) から設定
-		return new Vector3(156f, 44f, -58f);
+		// Camera: (156.0, 50.0, -58.0) から設定（地形のすり抜け防止のため少し高めに設定）
+		return new Vector3(156f, 50f, -58f);
 	}
 
 	private void CreateWorldSelectMenu()
@@ -734,7 +787,7 @@ public partial class Megaton : Node3D
 				}
 
 				_bsaReaders.Add(bsa);
-				GD.Print($"[Megaton] Loaded BSA: {name} ({files.Count} files)");
+// GD.Print($"[Megaton] Loaded BSA: {name} ({files.Count} files)");
 			}
 			catch (Exception e)
 			{
@@ -750,7 +803,7 @@ public partial class Megaton : Node3D
 	private void DiscoverWorlds()
 	{
 		var wrldIndex = _esm.BuildFormIdIndex(new[] { "WRLD" });
-		GD.Print($"[Megaton] Discovering worlds: {wrldIndex.Count} WRLD records found");
+// GD.Print($"[Megaton] Discovering worlds: {wrldIndex.Count} WRLD records found");
 
 		foreach (var kvp in wrldIndex)
 		{
@@ -772,7 +825,7 @@ public partial class Megaton : Node3D
 				}
 				if (dnam != null && name == "MegatonWorld")
 				{
-					GD.Print($"[WRLD] MegatonWorld DNAM data[{dnam.Data.Length}]: {BitConverter.ToString(dnam.Data)}");
+// GD.Print($"[WRLD] MegatonWorld DNAM data[{dnam.Data.Length}]: {BitConverter.ToString(dnam.Data)}");
 				}
 
 				int nwX = 0, nwY = 0, seX = 0, seY = 0;
@@ -822,10 +875,10 @@ public partial class Megaton : Node3D
 				_worldNameById[rec.FormId] = name;
 				_worldNameList.Add(name);
 
-				GD.Print($"[Megaton]   World: {name} (0x{rec.FormId:X8})" +
-					$" center=({center.X:F0},{center.Y:F0})" +
-					$" landH={defaultLandHeight}" +
-					$" cells=({wd.NwCellX},{wd.NwCellY})-({wd.SeCellX},{wd.SeCellY})");
+// GD.Print($"[Megaton]   World: {name} (0x{rec.FormId:X8})" +
+// 					$" center=({center.X:F0},{center.Y:F0})" +
+// 					$" landH={defaultLandHeight}" +
+// 					$" cells=({wd.NwCellX},{wd.NwCellY})-({wd.SeCellX},{wd.SeCellY})");
 			}
 			catch (Exception e)
 			{
@@ -834,10 +887,10 @@ public partial class Megaton : Node3D
 		}
 
 		// Log all discovered worlds for debugging
-		GD.Print($"[Megaton] === DISCOVERED WORLDS ({_worldNameList.Count}) ===");
+// GD.Print($"[Megaton] === DISCOVERED WORLDS ({_worldNameList.Count}) ===");
 		for (int i = 0; i < _worldNameList.Count; i++)
-			GD.Print($"  [{i + 1}] {_worldNameList[i]}");
-		GD.Print("[Megaton] =================================");
+// GD.Print($"  [{i + 1}] {_worldNameList[i]}");
+// GD.Print("[Megaton] =================================");
 
 		// Sort world list: put common worlds first for easy keyboard access
 		_worldNameList = _worldNameList
@@ -853,13 +906,13 @@ public partial class Megaton : Node3D
 			.ThenBy(n => n)
 			.ToList();
 
-		GD.Print($"[Megaton] Total worlds discovered: {_worldNameList.Count}");
+// GD.Print($"[Megaton] Total worlds discovered: {_worldNameList.Count}");
 	}
 
 	private void DiscoverCells()
 	{
 		var cellIndex = _esm.BuildFormIdIndex(new[] { "CELL" });
-		GD.Print($"[Megaton] Discovering interior cells: {cellIndex.Count} CELL records found");
+// GD.Print($"[Megaton] Discovering interior cells: {cellIndex.Count} CELL records found");
 
 		int interiorCount = 0;
 		foreach (var kvp in cellIndex)
@@ -903,7 +956,7 @@ public partial class Megaton : Node3D
 			}
 		}
 
-		GD.Print($"[Megaton] Interior cells discovered: {interiorCount}");
+// GD.Print($"[Megaton] Interior cells discovered: {interiorCount}");
 	}
 
 	private async Task LoadCellAsync(string cellEdid)
@@ -937,7 +990,7 @@ public partial class Megaton : Node3D
 		_cellContainers[cellEdid] = container;
 		AddChild(container);
 
-		GD.Print($"[Megaton] Loading cell '{cellEdid}' (0x{cd.FormId:X8})...");
+// GD.Print($"[Megaton] Loading cell '{cellEdid}' (0x{cd.FormId:X8})...");
 
 		// Load REFR, ACHR, ACRE for this cell
 		LoadCellRefrs(cd);
@@ -946,7 +999,7 @@ public partial class Megaton : Node3D
 		var lighting = _lightingLoader.GetCellLighting(cd.FormId);
 		if (lighting != null)
 		{
-			GD.Print($"[Megaton] Applying lighting for cell '{cellEdid}'");
+// GD.Print($"[Megaton] Applying lighting for cell '{cellEdid}'");
 			LightingLoader.ApplyCellLighting(container, lighting);
 		}
 
@@ -968,7 +1021,7 @@ public partial class Megaton : Node3D
 		}
 
 		_cellLoading[cellEdid] = false;
-		GD.Print($"[Megaton] Cell '{cellEdid}' loaded successfully.");
+// GD.Print($"[Megaton] Cell '{cellEdid}' loaded successfully.");
 		return Task.CompletedTask;
 	}
 
@@ -1014,14 +1067,14 @@ public partial class Megaton : Node3D
 			}
 		}
 
-		GD.Print($"[Megaton] Cell '{cd.Edid}': {refrsToProcess.Count} placements (REFR + {achrCount} ACHR + {acreCount} ACRE).");
+// GD.Print($"[Megaton] Cell '{cd.Edid}': {refrsToProcess.Count} placements (REFR + {achrCount} ACHR + {acreCount} ACRE).");
 
 		Parallel.ForEach(refrsToProcess, offset =>
 		{
 			ProcessCellRecord(offset, cd);
 		});
 
-		GD.Print($"[Megaton] Cell '{cd.Edid}': parsing done. Queue: {_instantiateQueue.Count}");
+// GD.Print($"[Megaton] Cell '{cd.Edid}': parsing done. Queue: {_instantiateQueue.Count}");
 	}
 
 	private void ProcessCellRecord(long offset, CellData cd)
@@ -1225,7 +1278,7 @@ public partial class Megaton : Node3D
 		}
 
 		_worldLoading[worldName] = true;
-		GD.Print($"[Megaton] Loading world: {worldName} (0x{wd.FormId:X8})...");
+// GD.Print($"[Megaton] Loading world: {worldName} (0x{wd.FormId:X8})...");
 
 		var container = new Node3D();
 		container.Name = $"World_{worldName}";
@@ -1250,7 +1303,7 @@ public partial class Megaton : Node3D
 		await Task.Run(() => LoadWorldRefrs(wd));
 
 		_worldLoading[worldName] = false;
-		GD.Print($"[Megaton] Finished loading world: {worldName}");
+// GD.Print($"[Megaton] Finished loading world: {worldName}");
 	}
 
 	private void LoadTerrain(WorldData wd, Node3D container)
@@ -1259,7 +1312,7 @@ public partial class Megaton : Node3D
 		{
 			var tiles = _terrainBuilder.BuildTerrainForWorld(wd.FormId, wd.Center, LoadTexture,
 				wd.DefaultLandHeight, wd.NwCellX, wd.NwCellY, wd.SeCellX, wd.SeCellY);
-			GD.Print($"[Megaton] World '{wd.Name}': loaded {tiles.Count} terrain tiles.");
+// GD.Print($"[Megaton] World '{wd.Name}': loaded {tiles.Count} terrain tiles.");
 
 			var lodList = new List<TerrainLodEntry>();
 
@@ -1310,7 +1363,7 @@ public partial class Megaton : Node3D
 				var lighting = _lightingLoader.GetCellLighting(kvp.Key);
 				if (lighting != null)
 				{
-					GD.Print($"[Megaton] Found lighting for CELL 0x{kvp.Key:X8} in '{wd.Name}'");
+					// GD.Print($"[Megaton] Found lighting for CELL 0x{kvp.Key:X8} in '{wd.Name}'");
 					LightingLoader.ApplyCellLighting(container, lighting);
 					break;
 				}
@@ -1329,7 +1382,7 @@ public partial class Megaton : Node3D
 			var navMeshes = _navMeshBuilder.GetNavMeshesForWorld(wd.FormId);
 			if (navMeshes.Count == 0)
 			{
-				GD.Print($"[Megaton] No navmeshes for world '{wd.Name}'");
+// GD.Print($"[Megaton] No navmeshes for world '{wd.Name}'");
 				return;
 			}
 
@@ -1356,8 +1409,8 @@ public partial class Megaton : Node3D
 				totalPolys += navData.Triangles.Length;
 			}
 
-			GD.Print($"[Megaton] Built {navMeshes.Count} navmesh regions for '{wd.Name}': " +
-				$"{totalVerts} verts, {totalPolys} polys");
+// GD.Print($"[Megaton] Built {navMeshes.Count} navmesh regions for '{wd.Name}': " +
+// 				$"{totalVerts} verts, {totalPolys} polys");
 		}
 		catch (Exception e)
 		{
@@ -1407,7 +1460,7 @@ public partial class Megaton : Node3D
 				if (ambientContainer != null)
 					container.AddChild(ambientContainer);
 
-				GD.Print($"[Megaton] Added {ambientSounds.Count} ambient sounds for '{wd.Name}'");
+// GD.Print($"[Megaton] Added {ambientSounds.Count} ambient sounds for '{wd.Name}'");
 			}
 		}
 		catch (Exception e)
@@ -1443,14 +1496,14 @@ public partial class Megaton : Node3D
 			}
 		}
 
-		GD.Print($"[Megaton] World '{wd.Name}': {refrsToProcess.Count} placements (REFR + {achrCount} ACHR + {acreCount} ACRE).");
+// GD.Print($"[Megaton] World '{wd.Name}': {refrsToProcess.Count} placements (REFR + {achrCount} ACHR + {acreCount} ACRE).");
 
 		Parallel.ForEach(refrsToProcess, offset =>
 		{
 			ProcessRecord(offset, wd);
 		});
 
-		GD.Print($"[Megaton] World '{wd.Name}': parsing done. Queue: {_instantiateQueue.Count}");
+// GD.Print($"[Megaton] World '{wd.Name}': parsing done. Queue: {_instantiateQueue.Count}");
 	}
 
 		private void ProcessRecord(long offset, WorldData wd)
@@ -1711,7 +1764,7 @@ public partial class Megaton : Node3D
 			return;
 		}
 
-		GD.Print($"[Megaton] Switching to world: {worldName}");
+// GD.Print($"[Megaton] Switching to world: {worldName}");
 
 		if (_worldContainers.TryGetValue(worldName, out var container))
 		{
@@ -1753,7 +1806,7 @@ public partial class Megaton : Node3D
 			RepositionCameraForWorld(cameraWd);
 		}
 
-		GD.Print($"[Megaton] Now showing world: {worldName}");
+// GD.Print($"[Megaton] Now showing world: {worldName}");
 	}
 
 	private void RepositionCameraForWorld(WorldData wd)
@@ -1782,7 +1835,7 @@ public partial class Megaton : Node3D
 
 		target.GlobalPosition = new Vector3(engineX, engineY, engineZ);
 
-		GD.Print($"[Megaton] Player -> ({engineX:F1}, {engineY:F1}, {engineZ:F1}) for '{wd.Name}'");
+// GD.Print($"[Megaton] Player -> ({engineX:F1}, {engineY:F1}, {engineZ:F1}) for '{wd.Name}'");
 	}
 
 	private bool TryReadStartPosition(string worldName, out float fo3X, out float fo3Y)
@@ -1816,16 +1869,32 @@ public partial class Megaton : Node3D
 		// Check periodically
 		if (_autoSwitchCooldown > 0) { _autoSwitchCooldown--; return; }
 
-		var cam = GetViewport()?.GetCamera3D();
-		if (cam == null) return;
-		Vector3 camPos = cam.GlobalPosition;
+		Vector3 targetPos = Vector3.Zero;
+		bool hasTarget = false;
+
+		if (_player != null && _player.IsInsideTree())
+		{
+			targetPos = _player.GlobalPosition;
+			hasTarget = true;
+		}
+		else
+		{
+			var cam = GetViewport()?.GetCamera3D();
+			if (cam != null)
+			{
+				targetPos = cam.GlobalPosition;
+				hasTarget = true;
+			}
+		}
+
+		if (!hasTarget) return;
 
 		if (!_worldDataByName.TryGetValue(_currentWorldName, out var currentWd)) return;
 
-		// Convert camera Godot position to absolute FO3 coordinates
-		float camFo3X = camPos.X / WorldScale + currentWd.Center.X;
-		float camFo3Y = -camPos.Z / WorldScale + currentWd.Center.Y;
-		float camFo3Z = camPos.Y / WorldScale;
+		// Convert Godot position to absolute FO3 coordinates
+		float camFo3X = targetPos.X / WorldScale + currentWd.Center.X;
+		float camFo3Y = -targetPos.Z / WorldScale + currentWd.Center.Y;
+		float camFo3Z = targetPos.Y / WorldScale;
 
 		// Find nearest exterior world (including current, with slight bias to prevent oscillation)
 		string nearestWorld = _currentWorldName;
@@ -1902,7 +1971,7 @@ public partial class Megaton : Node3D
 
 		// Cooldown to prevent rapid back-and-forth switching
 		_autoSwitchCooldown = 60;
-		GD.Print($"[Megaton] Auto-switched to world: {worldName} at ({engineX:F1}, {engineY:F1}, {engineZ:F1})");
+// GD.Print($"[Megaton] Auto-switched to world: {worldName} at ({engineX:F1}, {engineY:F1}, {engineZ:F1})");
 	}
 
 	private async Task LoadWorldAndSwitchAutoAsync(string worldName, float fo3X, float fo3Y, float fo3Z)
@@ -1926,6 +1995,18 @@ public partial class Megaton : Node3D
 
 		if (!string.IsNullOrEmpty(req.Path))
 		{
+			// Skip developer markers, bounds, and debug wind arrows
+			if (req.Path.IndexOf("marker", StringComparison.OrdinalIgnoreCase) >= 0 ||
+				req.Path.IndexOf("collision", StringComparison.OrdinalIgnoreCase) >= 0 ||
+				req.Path.IndexOf("editor", StringComparison.OrdinalIgnoreCase) >= 0 ||
+				req.Path.IndexOf("syswindow", StringComparison.OrdinalIgnoreCase) >= 0 ||
+				req.Path.IndexOf("camera", StringComparison.OrdinalIgnoreCase) >= 0 ||
+				req.Path.IndexOf("sound", StringComparison.OrdinalIgnoreCase) >= 0 ||
+				req.Path.IndexOf("wind", StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				return;
+			}
+
 			var mesh = GetOrBuildMesh(req.Path);
 			bool isSkinned = _skinnedCache.TryGetValue(req.Path, out var skinnedNodes) && skinnedNodes.Count > 0;
 
@@ -1963,7 +2044,7 @@ public partial class Megaton : Node3D
 				}
 				else if (mesh != null)
 				{
-					var meshInst2 = RentMeshInstance(req.Path, mesh, Transform3D.Identity, npcAgent);
+					var meshInst2 = RentMeshInstance(req.Path, mesh, Transform3D.Identity, null);
 					npcAgent.AttachSkinnedMesh(meshInst2);
 					TrackProp(meshInst2, npcAgent, req.Position, req.Path, mesh, null);
 				}
@@ -2012,28 +2093,14 @@ public partial class Megaton : Node3D
 				var basis = engineRot.Scaled(Vector3.One * req.Scale);
 				var transform = new Transform3D(basis, req.Position);
 
-				if (mesh != null && _nifCache.TryGetValue(req.Path, out var nif))
+				inst = RentMeshInstance(req.Path, mesh, transform, container);
+				TrackProp(inst, null, req.Position, req.Path, mesh, null);
+
+				// Generate pixel-perfect collision from the visible mesh for all static objects
+				// This completely prevents falling through slopes or unhandled Havok collision blocks.
+				if (req.BaseType == "STAT" || req.BaseType == "DOOR" || req.BaseType == "SCOL" || req.BaseType == "MSTT")
 				{
-					var colResult = NIFCollisionBuilder.BuildCollision(nif, null);
-					if (colResult.HasValue)
-					{
-						physicsBody = colResult.Value.Body;
-						physicsBody.Name = $"Body_{req.FormId:X8}";
-						physicsBody.Transform = transform;
-
-						inst = RentMeshInstance(req.Path, mesh, Transform3D.Identity, null);
-						inst.Transform = Transform3D.Identity;
-						physicsBody.AddChild(inst);
-
-						container.AddChild(physicsBody);
-						TrackProp(inst, physicsBody, req.Position, req.Path, mesh, null);
-					}
-				}
-
-				if (inst == null && mesh != null)
-				{
-					inst = RentMeshInstance(req.Path, mesh, transform, container);
-					TrackProp(inst, null, req.Position, req.Path, mesh, null);
+					inst.CreateTrimeshCollision();
 				}
 			}
 		}
@@ -2162,13 +2229,13 @@ public partial class Megaton : Node3D
 	{
 		if (formId != 0)
 		{
-			GD.Print($"[Megaton] Picked object FormId=0x{formId:X8}: {pickedNode?.Name}");
+// GD.Print($"[Megaton] Picked object FormId=0x{formId:X8}: {pickedNode?.Name}");
 			if (_hud != null)
 				_hud.ShowInfo($"Selected: 0x{formId:X8}");
 		}
 		else if (pickedNode != null)
 		{
-			GD.Print($"[Megaton] Picked node: {pickedNode.Name}");
+// GD.Print($"[Megaton] Picked node: {pickedNode.Name}");
 			if (_hud != null)
 				_hud.ShowInfo($"Selected: {pickedNode.Name}");
 		}
@@ -2355,7 +2422,8 @@ public partial class Megaton : Node3D
 		if (_fallbackMagentaTex == null)
 		{
 			var img = Image.CreateEmpty(4, 4, false, Image.Format.Rgba8);
-			img.Fill(new Color(1f, 0f, 1f));
+			// Make fallback completely transparent so missing textures/decals don't show up as bright colored rectangles
+			img.Fill(new Color(1f, 0f, 1f, 0f));
 			_fallbackMagentaTex = ImageTexture.CreateFromImage(img);
 		}
 		return _fallbackMagentaTex;
@@ -2458,9 +2526,10 @@ public partial class Megaton : Node3D
 			return shadowTex;
 		}
 
-		GD.Print($"[Megaton] WARNING: Failed to load DDS texture '{searchPath}' (err={err}) - using fallback");
+// GD.Print($"[Megaton] WARNING: Failed to load DDS texture '{searchPath}' (err={err}) - using fallback");
 		var fallback = GetFallbackMagenta();
 		_textureCache.TryAdd(searchPath, fallback);
+		_textureHasAlpha.TryAdd(searchPath, true);
 		return fallback;
 	}
 

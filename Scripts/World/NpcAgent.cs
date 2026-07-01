@@ -82,6 +82,7 @@ namespace OpenFo3.World
                 AddChild(_nameLabel);
             }
             _nameLabel.Text = _npcName;
+            _nameLabel.Visible = false; // デバッグ用のためデフォルトで非表示
 
             _idleTimer = GetRandomIdleTime();
 

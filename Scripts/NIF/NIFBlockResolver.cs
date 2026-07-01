@@ -57,9 +57,13 @@ namespace OpenFo3.NIF
                 using var ms = new MemoryStream(block.Data);
                 using var br = new BinaryReader(ms);
 
-                if (block.Type == "NiNode" || block.Type == "BSFadeNode" || block.Type == "BSLeafAnimNode" || block.Type == "BSLODNode" || block.Type == "NiBillboardNode" || block.Type == "NiSortAdjustNode" || block.Type == "NiSwitchNode" || block.Type == "BSValueNode" || block.Type == "BSOrderedNode" || block.Type == "BSRangeNode" || block.Type == "BSMultiBoundNode" || block.Type == "BSTreeNode" || block.Type == "NiBone" || block.Type == "RoomMarker" || block.Type == "NiRoomGroup" || block.Type == "BSMasterParticleSystem" || block.Type == "BSRefractionFireGlow" || block.Type == "NiAmbientLight" || block.Type == "NiDirectionalLight" || block.Type == "NiSpotLight" || block.Type == "NiPointLight")
+                if (block.Type == "NiNode" || block.Type == "BSFadeNode" || block.Type == "BSLeafAnimNode" || block.Type == "BSLODNode" || block.Type == "NiBillboardNode" || block.Type == "NiSortAdjustNode" || block.Type == "NiSwitchNode" || block.Type == "BSValueNode" || block.Type == "BSOrderedNode" || block.Type == "BSRangeNode" || block.Type == "BSMultiBoundNode" || block.Type == "BSTreeNode" || block.Type == "NiBone" || block.Type == "RoomMarker" || block.Type == "NiRoomGroup" || block.Type == "BSMasterParticleSystem" || block.Type == "BSRefractionFireGlow")
                 {
                     return ParseNode(br, block.Index, block.Type);
+                }
+                else if (block.Type == "NiAmbientLight" || block.Type == "NiDirectionalLight" || block.Type == "NiSpotLight" || block.Type == "NiPointLight")
+                {
+                    return ParseNode(br, block.Index, block.Type, readNodeChildren: false);
                 }
                 else if (block.Type == "BSStripParticleSystem")
                 {

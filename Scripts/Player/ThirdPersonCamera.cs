@@ -62,6 +62,8 @@ namespace OpenFo3.Player
 
         public override void _Input(InputEvent @event)
         {
+            if (_camera == null || !_camera.Current) return;
+
             if (@event is InputEventMouseMotion mouse && Input.MouseMode == Input.MouseModeEnum.Captured)
             {
                 float yawDelta = -mouse.Relative.X * Sensitivity;

@@ -15,6 +15,7 @@ namespace OpenFo3.Player
         [Export] public float ApRegenRate { get; set; } = 8f;
         [Export] public float ApSprintDrain { get; set; } = 15f;
         [Export] public bool UseThirdPerson { get; set; } = false;
+        public Vector3 SpawnPosition { get; set; } = new Vector3(0, 60, 0);
  
         private Camera3D _camera;
         private ThirdPersonCamera _tpsCamera;
@@ -44,6 +45,11 @@ namespace OpenFo3.Player
             // 明示的に衝突レイヤーとマスクを設定 (1: 地形および静的・動的オブジェクトと衝突させる)
             CollisionLayer = 1;
             CollisionMask = 1;
+
+            // 地面への引っ掛かり防止とスロープ登頂のため
+            FloorMaxAngle = Mathf.DegToRad(65f); // 65度まで登れるようにする
+            FloorSnapLength = 0.3f; // スロープからの飛び出し防止
+            SafeMargin = 0.05f; // メッシュの継ぎ目での引っかかり軽減
 
             // ── コリジョン（必須: ないと地面と衝突せず奈落落下する） ──
             var colShape = GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
@@ -117,7 +123,7 @@ namespace OpenFo3.Player
                         // TPS/FPS切り替え時にビジュアル表示を更新
                         if (_meshRoot != null)
                             _meshRoot.Visible = UseThirdPerson;
-                        GD.Print($"[PlayerController] Camera toggled. ThirdPerson = {UseThirdPerson}");
+                        // GD.Print($"[PlayerController] Camera toggled. ThirdPerson = {UseThirdPerson}");
                     }
                     return;
                 }
@@ -227,8 +233,8 @@ namespace OpenFo3.Player
             // ── 落下防止のセーフティガード（地形ロードの遅れ等によるすり抜け防止） ──
             if (GlobalPosition.Y < -50f)
             {
-                GD.PrintErr($"[PlayerController] Fall detected (Y={GlobalPosition.Y}). Safety teleporting player to Vault101 entry.");
-                GlobalPosition = new Vector3(156f, 44f, -58f); // Vault 101の開始地点
+                GD.PrintErr($"[PlayerController] Fall detected (Y={GlobalPosition.Y}). Safety teleporting player to SpawnPosition.");
+                GlobalPosition = SpawnPosition; // 設定された安全地点に戻る
                 Velocity = Vector3.Zero;
             }
 
@@ -308,20 +314,28 @@ namespace OpenFo3.Player
             _hud = hud;
         }
 
-        public void AttachSkinnedMesh(Node3D meshRoot)
+        private System.Collections.Generic.List<Node3D> _meshLayers = new();
+
+        public void ClearMeshes()
         {
-            if (_meshRoot != null)
+            foreach (var m in _meshLayers)
             {
-                _meshRoot.QueueFree();
+                if (m != null) m.QueueFree();
             }
-            _meshRoot = meshRoot;
-            AddChild(_meshRoot);
-            _meshRoot.Visible = UseThirdPerson;
+            _meshLayers.Clear();
+            _animPlayer = null;
+        }
+
+        public void AddMeshLayer(Node3D meshRoot, bool isMainSkeleton = false)
+        {
+            _meshLayers.Add(meshRoot);
+            AddChild(meshRoot);
+            meshRoot.Visible = true; // Force visible for testing
             
-            _animPlayer = _meshRoot.GetNodeOrNull<AnimationPlayer>("AnimationPlayer");
-            if (_animPlayer != null)
+            if (isMainSkeleton || _animPlayer == null)
             {
-                GD.Print("[PlayerController] AnimationPlayer attached successfully.");
+                var ap = meshRoot.GetNodeOrNull<AnimationPlayer>("AnimationPlayer");
+                if (ap != null) _animPlayer = ap;
             }
         }
 
@@ -337,15 +351,16 @@ namespace OpenFo3.Player
             if (_animPlayer.GetAnimationLibrary("") == null)
                 _animPlayer.AddAnimationLibrary("", lib);
                 
-            GD.Print($"[PlayerController] Loaded {anims.Count} animations.");
+            // GD.Print($"[PlayerController] Loaded {anims.Count} animations.");
         }
 
         public void Spawn(Vector3 position)
         {
+            GlobalPosition = position;
+            SpawnPosition = position;
+            Velocity = Vector3.Zero;
             _currentHealth = MaxHealth;
             _currentAp = MaxActionPoints;
-            GlobalPosition = position;
-            Velocity = Vector3.Zero;
             _pitch = 0;
             Rotation = Vector3.Zero;
 
@@ -391,7 +406,7 @@ namespace OpenFo3.Player
                     if (_camera != null) _camera.Current = true;
                 }
                 Input.MouseMode = Input.MouseModeEnum.Captured;
-                GD.Print("[PlayerController] Free camera disabled.");
+                // GD.Print("[PlayerController] Free camera disabled.");
             }
             else
             {
@@ -413,7 +428,7 @@ namespace OpenFo3.Player
                 GetParent().AddChild(_flyCam);
                 _flyCam.MakeCurrent();
                 Input.MouseMode = Input.MouseModeEnum.Captured;
-                GD.Print("[PlayerController] Free camera enabled.");
+                // GD.Print("[PlayerController] Free camera enabled.");
             }
         }
     }
