@@ -384,14 +384,19 @@ namespace OpenFo3.World
 		            }
 		        }
 
-		        float tempRowHeight = baseHeight;
+		        float rowOffset = 0;
 		        for (int row = 0; row < GridSize; row++)
 		        {
-		            tempRowHeight += deltas[row, 0] * 8f;
-		            heights[row, 0] = tempRowHeight;
+		            if (row > 0) {
+		                rowOffset += deltas[row, 0] * 8f;
+		            }
+		            heights[row, 0] = baseHeight + rowOffset;
+		            
+		            float colOffset = rowOffset;
 		            for (int col = 1; col < GridSize; col++)
 		            {
-		                heights[row, col] = heights[row, col - 1] + deltas[row, col] * 8f;
+		                colOffset += deltas[row, col] * 8f;
+		                heights[row, col] = baseHeight + colOffset;
 		            }
 		        }
 
@@ -502,7 +507,7 @@ namespace OpenFo3.World
 		            int idx = lr * qSize + lc;
 
 		            float godotX = (originX + gc * step - megatonCenter.X) * WorldScale;
-		            float godotY = (hCenter + (heights[gr, gc] - hCenter) * _heightExaggeration) * HeightScale;
+		            float godotY = heights[gr, gc] * HeightScale;
 		            float godotZ = -(originY + gr * step - megatonCenter.Y) * WorldScale;
 
 		            verts[idx] = new Vector3(godotX, godotY, godotZ);
@@ -554,13 +559,13 @@ namespace OpenFo3.World
 
 		            Vector3 v0 = verts[bl], v1 = verts[tl], v2 = verts[br], v3 = verts[tr];
 
-		            Vector3 n1 = (v1 - v0).Cross(v2 - v0);
+		            Vector3 n1 = (v2 - v0).Cross(v1 - v0); // CW(bl->tl->br) with Upward normal
 		            n1 = n1.Normalized();
 		            norms[bl] += n1;
 		            norms[tl] += n1;
 		            norms[br] += n1;
 
-		            Vector3 n2 = (v1 - v2).Cross(v3 - v2);
+		            Vector3 n2 = (v3 - v2).Cross(v1 - v2); // CW(br->tl->tr) with Upward normal
 		            n2 = n2.Normalized();
 		            norms[br] += n2;
 		            norms[tl] += n2;
@@ -648,7 +653,7 @@ namespace OpenFo3.World
 		            int idx = lr * lodGridSize + lc;
 
 		            float godotX = (originX + gc * step - megatonCenter.X) * WorldScale;
-		            float godotY = (hCenter + (heights[gr, gc] - hCenter) * _heightExaggeration) * HeightScale;
+		            float godotY = heights[gr, gc] * HeightScale;
 		            float godotZ = -(originY + gr * step - megatonCenter.Y) * WorldScale;
 
 		            verts[idx] = new Vector3(godotX, godotY, godotZ);
@@ -696,8 +701,8 @@ namespace OpenFo3.World
 		            int tr = (lr + 1) * lodGridSize + lc + 1;
 
 		            Vector3 v0 = verts[bl], v1 = verts[tl], v2 = verts[br], v3 = verts[tr];
-		            Vector3 n1 = (v1 - v0).Cross(v2 - v0).Normalized();
-		            Vector3 n2 = (v1 - v2).Cross(v3 - v2).Normalized();
+		            Vector3 n1 = (v2 - v0).Cross(v1 - v0).Normalized();
+		            Vector3 n2 = (v3 - v2).Cross(v1 - v2).Normalized();
 		            norms[bl] += n1; norms[tl] += n1; norms[br] += n1;
 		            norms[br] += n2; norms[tl] += n2; norms[tr] += n2;
 		        }
@@ -767,7 +772,7 @@ namespace OpenFo3.World
 		        {
 		            int idx = row * GridSize + col;
 		            float godotX = (originX + col * step - megatonCenter.X) * WorldScale;
-		            float godotY = (hCenter + (heights[row, col] - hCenter) * CollisionHeightExaggeration) * HeightScale;
+		            float godotY = heights[row, col] * HeightScale;
 		            float godotZ = -(originY + row * step - megatonCenter.Y) * WorldScale;
 		            colVerts[idx] = new Vector3(godotX, godotY, godotZ);
 		        }

@@ -1092,6 +1092,16 @@ public partial class Megaton : Node3D
 				rx = BitConverter.ToSingle(dataSub.Data, 12);
 				ry = BitConverter.ToSingle(dataSub.Data, 16);
 				rz = BitConverter.ToSingle(dataSub.Data, 20);
+
+				// FO3/GECK often exports or stores rotations in degrees rather than radians.
+				// If absolute values exceed 10.0 (which is > 3 full rotations in radians),
+				// it's practically guaranteed to be degrees. Convert to radians.
+				if (Math.Abs(rx) > 10f || Math.Abs(ry) > 10f || Math.Abs(rz) > 10f)
+				{
+					rx = (float)(rx * Math.PI / 180.0);
+					ry = (float)(ry * Math.PI / 180.0);
+					rz = (float)(rz * Math.PI / 180.0);
+				}
 			}
 
 			var xclSub = subs.FirstOrDefault(s => s.Type == "XSCL");
@@ -1932,8 +1942,8 @@ public partial class Megaton : Node3D
 			// NPC/CREA handling: create NpcAgent with skinned mesh + AI
 			if (isNpc)
 			{
-				Basis fo3Rot = Basis.FromEuler(req.Rotation, EulerOrder.Zyx);
-				Basis godotRot = _rFo3ToGodot * fo3Rot * _rFo3ToGodot.Inverse();
+				Vector3 godotEuler = new Vector3(req.Rotation.X, req.Rotation.Z, -req.Rotation.Y);
+				Basis godotRot = Basis.FromEuler(godotEuler, EulerOrder.Xzy);
 				var basis = godotRot.Scaled(Vector3.One * req.Scale);
 				var transform = new Transform3D(basis, req.Position);
 
@@ -1976,8 +1986,8 @@ public partial class Megaton : Node3D
 			// Check for skinned node hierarchy (skeleton + skinned meshes)
 			if (isSkinned)
 			{
-				Basis fo3Rot = Basis.FromEuler(req.Rotation, EulerOrder.Zyx);
-				Basis godotRot = _rFo3ToGodot * fo3Rot * _rFo3ToGodot.Inverse();
+				Vector3 godotEuler = new Vector3(req.Rotation.X, req.Rotation.Z, -req.Rotation.Y);
+				Basis godotRot = Basis.FromEuler(godotEuler, EulerOrder.Xzy);
 				var basis = godotRot.Scaled(Vector3.One * req.Scale);
 				var transform = new Transform3D(basis, req.Position);
 
@@ -1995,8 +2005,8 @@ public partial class Megaton : Node3D
 			{
 				if (mesh == null && req.BaseType != "LIGH") return;
 
-				Basis fo3Rot = Basis.FromEuler(req.Rotation, EulerOrder.Zyx);
-				Basis godotRot = _rFo3ToGodot * fo3Rot * _rFo3ToGodot.Inverse();
+				Vector3 godotEuler = new Vector3(req.Rotation.X, req.Rotation.Z, -req.Rotation.Y);
+				Basis godotRot = Basis.FromEuler(godotEuler, EulerOrder.Xzy);
 				var basis = godotRot.Scaled(Vector3.One * req.Scale);
 				var transform = new Transform3D(basis, req.Position);
 
@@ -2030,8 +2040,8 @@ public partial class Megaton : Node3D
 		// Create particle systems from the NIF
 		if (!string.IsNullOrEmpty(req.Path) && _particleCache.TryGetValue(req.Path, out var particles))
 		{
-			Basis fo3Rot = Basis.FromEuler(req.Rotation, EulerOrder.Zyx);
-			Basis godotRot = _rFo3ToGodot * fo3Rot * _rFo3ToGodot.Inverse();
+			Vector3 godotEuler = new Vector3(req.Rotation.X, req.Rotation.Z, -req.Rotation.Y);
+			Basis godotRot = Basis.FromEuler(godotEuler, EulerOrder.Xzy);
 			var basis = godotRot.Scaled(Vector3.One * req.Scale);
 			var worldTransform = new Transform3D(basis, req.Position);
 
