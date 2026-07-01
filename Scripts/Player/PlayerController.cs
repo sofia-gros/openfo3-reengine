@@ -21,7 +21,8 @@ namespace OpenFo3.Player
         private WeaponSystem _weapon;
         private HudOverlay _hud;
         private Node3D _weaponHolder;
-        private MeshInstance3D _playerVisual;
+        private Node3D _meshRoot;
+        private AnimationPlayer _animPlayer;
         private float _pitch;
         private float _currentHealth;
         private float _currentAp;
@@ -59,25 +60,7 @@ namespace OpenFo3.Player
                 AddChild(colShape);
             }
 
-            // ── 簡易プレイヤービジュアル（半透明カプセル、TPS時のみ表示） ──
-            _playerVisual = GetNodeOrNull<MeshInstance3D>("PlayerVisual");
-            if (_playerVisual == null)
-            {
-                _playerVisual = new MeshInstance3D();
-                _playerVisual.Name = "PlayerVisual";
-                var capsuleMesh = new CapsuleMesh();
-                capsuleMesh.Radius = 0.35f;
-                capsuleMesh.Height = 1.8f;
-                _playerVisual.Mesh = capsuleMesh;
-                _playerVisual.Position = new Vector3(0, 0.9f, 0); // 足元から中心まで
-                var mat = new StandardMaterial3D();
-                mat.AlbedoColor = new Color(0.2f, 0.5f, 1.0f, 0.6f);
-                mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-                _playerVisual.MaterialOverride = mat;
-                // FPSモードでは自分のボディは非表示（TPSのみ表示）
-                _playerVisual.Visible = UseThirdPerson;
-                AddChild(_playerVisual);
-            }
+            // ── 実操作キャラクター（外部から NIF モデルを AttachSkinnedMesh でアタッチする） ──
 
             // ── FPS カメラ（目の高さ 1.7m） ──
             _camera = GetNodeOrNull<Camera3D>("Camera3D");
@@ -132,8 +115,8 @@ namespace OpenFo3.Player
                             _tpsCamera?.SetNotCurrent();
                         }
                         // TPS/FPS切り替え時にビジュアル表示を更新
-                        if (_playerVisual != null)
-                            _playerVisual.Visible = UseThirdPerson;
+                        if (_meshRoot != null)
+                            _meshRoot.Visible = UseThirdPerson;
                         GD.Print($"[PlayerController] Camera toggled. ThirdPerson = {UseThirdPerson}");
                     }
                     return;
@@ -251,6 +234,37 @@ namespace OpenFo3.Player
 
             _weapon?.UpdateBob(dt, direction.LengthSquared() > 0.01f && IsOnFloor());
 
+            if (_animPlayer != null)
+            {
+                bool moving = direction.LengthSquared() > 0.01f;
+                string targetAnim = moving ? "forward" : "idle";
+                
+                var lib = _animPlayer.GetAnimationLibrary("");
+                if (lib != null)
+                {
+                    string bestMatch = "";
+                    foreach (var anim in lib.GetAnimationList())
+                    {
+                        string lower = anim.ToString().ToLower();
+                        if (moving && (lower.Contains("forward") || lower.Contains("run") || lower.Contains("walk")))
+                        {
+                            bestMatch = anim;
+                            break;
+                        }
+                        else if (!moving && (lower.Contains("idle") || lower.Contains("mtidle")))
+                        {
+                            bestMatch = anim;
+                            break;
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(bestMatch))
+                    {
+                        if (!_animPlayer.IsPlaying() || _animPlayer.CurrentAnimation != bestMatch)
+                            _animPlayer.Play(bestMatch);
+                    }
+                }
+            }
+
             if (_hud != null)
             {
                 _hud.SetHealth(_currentHealth, MaxHealth);
@@ -292,6 +306,38 @@ namespace OpenFo3.Player
         public void SetHud(HudOverlay hud)
         {
             _hud = hud;
+        }
+
+        public void AttachSkinnedMesh(Node3D meshRoot)
+        {
+            if (_meshRoot != null)
+            {
+                _meshRoot.QueueFree();
+            }
+            _meshRoot = meshRoot;
+            AddChild(_meshRoot);
+            _meshRoot.Visible = UseThirdPerson;
+            
+            _animPlayer = _meshRoot.GetNodeOrNull<AnimationPlayer>("AnimationPlayer");
+            if (_animPlayer != null)
+            {
+                GD.Print("[PlayerController] AnimationPlayer attached successfully.");
+            }
+        }
+
+        public void LoadAnimations(System.Collections.Generic.List<(string Name, Animation Anim)> anims)
+        {
+            if (_animPlayer == null) return;
+            var lib = _animPlayer.GetAnimationLibrary("") ?? new AnimationLibrary();
+            foreach (var animPair in anims)
+            {
+                if (!lib.HasAnimation(animPair.Name))
+                    lib.AddAnimation(animPair.Name, animPair.Anim);
+            }
+            if (_animPlayer.GetAnimationLibrary("") == null)
+                _animPlayer.AddAnimationLibrary("", lib);
+                
+            GD.Print($"[PlayerController] Loaded {anims.Count} animations.");
         }
 
         public void Spawn(Vector3 position)

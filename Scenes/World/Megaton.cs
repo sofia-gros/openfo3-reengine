@@ -57,6 +57,12 @@ public partial class Megaton : Node3D
 	private bool _introActive;
 	private bool _inGame;
 
+	private static readonly Basis _rFo3ToGodot = new Basis(
+		new Vector3(1, 0, 0),
+		new Vector3(0, 0, -1),
+		new Vector3(0, 1, 0)
+	);
+
 	private struct InstanceRequest
 	{
 		public string Path;
@@ -452,6 +458,10 @@ public partial class Megaton : Node3D
 			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 		}
 
+		// Ensure physics engine has processed the colliders before spawning the player
+		await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+		await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+
 		// Spawn player inside Vault 101
 		// Vault101aのプレイヤー開始地点: FO3内部座標から変換
 		// Vault101a セルの中央付近（PlayerStartMarker位置）
@@ -605,7 +615,38 @@ public partial class Megaton : Node3D
 		Vector3 pos = spawnPosition ?? new Vector3(0, 20, 0);
 		_player.Spawn(pos);
 
-		GD.Print($"[Megaton] PlayerController created at {pos}");
+		// ── NIF モデルとアニメーションのロードとアタッチ ──
+		string playerMeshPath = "meshes/characters/_male/skeleton.nif";
+		var mesh = GetOrBuildMesh(playerMeshPath);
+		if (_skinnedCache.TryGetValue(playerMeshPath, out var skinnedNodes) && skinnedNodes.Count > 0)
+		{
+			foreach (var srcNode in skinnedNodes)
+			{
+				var clone = CloneNodeTree(srcNode);
+				clone.Transform = Transform3D.Identity;
+				_player.AttachSkinnedMesh(clone);
+				var meshInst = clone.FindChild("*", recursive: true) as MeshInstance3D;
+				if (meshInst != null)
+					TrackProp(meshInst, _player, pos, playerMeshPath, meshInst.Mesh as ArrayMesh, null);
+				break;
+			}
+		}
+		else if (mesh != null)
+		{
+			var meshInst2 = RentMeshInstance(playerMeshPath, mesh, Transform3D.Identity, _player);
+			_player.AttachSkinnedMesh(meshInst2);
+			TrackProp(meshInst2, _player, pos, playerMeshPath, mesh, null);
+		}
+
+		List<string> playerAnims = new List<string>
+		{
+			"meshes/characters/_male/locomotion/forward.kf",
+			"meshes/characters/_male/idle.kf"
+		};
+		var anims = BuildAnimationsForNpc(playerMeshPath, playerAnims);
+		_player.LoadAnimations(anims);
+
+		GD.Print($"[Megaton] PlayerController created at {pos} with model {playerMeshPath}");
 	}
 
 	/// <summary>
@@ -1891,11 +1932,9 @@ public partial class Megaton : Node3D
 			// NPC/CREA handling: create NpcAgent with skinned mesh + AI
 			if (isNpc)
 			{
-				var basis = Basis.Identity;
-				basis = basis.Rotated(Vector3.Right,   req.Rotation.X);
-				basis = basis.Rotated(Vector3.Forward, req.Rotation.Y);
-				basis = basis.Rotated(Vector3.Up,      req.Rotation.Z);
-				basis = basis.Scaled(Vector3.One * req.Scale);
+				Basis fo3Rot = Basis.FromEuler(req.Rotation, EulerOrder.Zyx);
+				Basis godotRot = _rFo3ToGodot * fo3Rot * _rFo3ToGodot.Inverse();
+				var basis = godotRot.Scaled(Vector3.One * req.Scale);
 				var transform = new Transform3D(basis, req.Position);
 
 				var npcAgent = new NpcAgent();
@@ -1937,11 +1976,9 @@ public partial class Megaton : Node3D
 			// Check for skinned node hierarchy (skeleton + skinned meshes)
 			if (isSkinned)
 			{
-				var basis = Basis.Identity;
-				basis = basis.Rotated(Vector3.Right,   req.Rotation.X);
-				basis = basis.Rotated(Vector3.Forward, req.Rotation.Y);
-				basis = basis.Rotated(Vector3.Up,      req.Rotation.Z);
-				basis = basis.Scaled(Vector3.One * req.Scale);
+				Basis fo3Rot = Basis.FromEuler(req.Rotation, EulerOrder.Zyx);
+				Basis godotRot = _rFo3ToGodot * fo3Rot * _rFo3ToGodot.Inverse();
+				var basis = godotRot.Scaled(Vector3.One * req.Scale);
 				var transform = new Transform3D(basis, req.Position);
 
 				foreach (var srcNode in skinnedNodes)
@@ -1958,11 +1995,9 @@ public partial class Megaton : Node3D
 			{
 				if (mesh == null && req.BaseType != "LIGH") return;
 
-				var basis = Basis.Identity;
-				basis = basis.Rotated(Vector3.Right,   req.Rotation.X);
-				basis = basis.Rotated(Vector3.Forward, req.Rotation.Y);
-				basis = basis.Rotated(Vector3.Up,      req.Rotation.Z);
-				basis = basis.Scaled(Vector3.One * req.Scale);
+				Basis fo3Rot = Basis.FromEuler(req.Rotation, EulerOrder.Zyx);
+				Basis godotRot = _rFo3ToGodot * fo3Rot * _rFo3ToGodot.Inverse();
+				var basis = godotRot.Scaled(Vector3.One * req.Scale);
 				var transform = new Transform3D(basis, req.Position);
 
 				if (mesh != null && _nifCache.TryGetValue(req.Path, out var nif))
@@ -1995,11 +2030,9 @@ public partial class Megaton : Node3D
 		// Create particle systems from the NIF
 		if (!string.IsNullOrEmpty(req.Path) && _particleCache.TryGetValue(req.Path, out var particles))
 		{
-			var basis = Basis.Identity;
-			basis = basis.Rotated(Vector3.Right,   req.Rotation.X);
-			basis = basis.Rotated(Vector3.Forward, req.Rotation.Y);
-			basis = basis.Rotated(Vector3.Up,      req.Rotation.Z);
-			basis = basis.Scaled(Vector3.One * req.Scale);
+			Basis fo3Rot = Basis.FromEuler(req.Rotation, EulerOrder.Zyx);
+			Basis godotRot = _rFo3ToGodot * fo3Rot * _rFo3ToGodot.Inverse();
+			var basis = godotRot.Scaled(Vector3.One * req.Scale);
 			var worldTransform = new Transform3D(basis, req.Position);
 
 			foreach (var pEntry in particles)
