@@ -506,11 +506,11 @@ namespace OpenFo3.World
 		            int gc = colStart + lc;
 		            int idx = lr * qSize + lc;
 
-		            float godotX = (originX + gc * step - megatonCenter.X) * WorldScale;
-		            float godotY = heights[gr, gc] * HeightScale;
-		            float godotZ = -(originY + gr * step - megatonCenter.Y) * WorldScale;
+		            float engineX = (originX + gc * step - megatonCenter.X) * WorldScale;
+		            float engineY = heights[gr, gc] * HeightScale;
+		            float engineZ = -(originY + gr * step - megatonCenter.Y) * WorldScale;
 
-		            verts[idx] = new Vector3(godotX, godotY, godotZ);
+		            verts[idx] = new Vector3(engineX, engineY, engineZ);
 
 		            if (vclrColors != null)
 		                cols[idx] = vclrColors[gr, gc];
@@ -652,11 +652,11 @@ namespace OpenFo3.World
 		            int gc = colStart + lc * lodStep;
 		            int idx = lr * lodGridSize + lc;
 
-		            float godotX = (originX + gc * step - megatonCenter.X) * WorldScale;
-		            float godotY = heights[gr, gc] * HeightScale;
-		            float godotZ = -(originY + gr * step - megatonCenter.Y) * WorldScale;
+		            float engineX = (originX + gc * step - megatonCenter.X) * WorldScale;
+		            float engineY = heights[gr, gc] * HeightScale;
+		            float engineZ = -(originY + gr * step - megatonCenter.Y) * WorldScale;
 
-		            verts[idx] = new Vector3(godotX, godotY, godotZ);
+		            verts[idx] = new Vector3(engineX, engineY, engineZ);
 
 		            if (vclrColors != null)
 		                cols[idx] = vclrColors[gr, gc];
@@ -771,10 +771,10 @@ namespace OpenFo3.World
 		        for (int col = 0; col < GridSize; col++)
 		        {
 		            int idx = row * GridSize + col;
-		            float godotX = (originX + col * step - megatonCenter.X) * WorldScale;
-		            float godotY = heights[row, col] * HeightScale;
-		            float godotZ = -(originY + row * step - megatonCenter.Y) * WorldScale;
-		            colVerts[idx] = new Vector3(godotX, godotY, godotZ);
+		            float engineX = (originX + col * step - megatonCenter.X) * WorldScale;
+		            float engineY = heights[row, col] * HeightScale;
+		            float engineZ = -(originY + row * step - megatonCenter.Y) * WorldScale;
+		            colVerts[idx] = new Vector3(engineX, engineY, engineZ);
 		        }
 		    }
 

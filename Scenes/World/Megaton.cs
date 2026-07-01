@@ -1092,16 +1092,6 @@ public partial class Megaton : Node3D
 				rx = BitConverter.ToSingle(dataSub.Data, 12);
 				ry = BitConverter.ToSingle(dataSub.Data, 16);
 				rz = BitConverter.ToSingle(dataSub.Data, 20);
-
-				// FO3/GECK often exports or stores rotations in degrees rather than radians.
-				// If absolute values exceed 10.0 (which is > 3 full rotations in radians),
-				// it's practically guaranteed to be degrees. Convert to radians.
-				if (Math.Abs(rx) > 10f || Math.Abs(ry) > 10f || Math.Abs(rz) > 10f)
-				{
-					rx = (float)(rx * Math.PI / 180.0);
-					ry = (float)(ry * Math.PI / 180.0);
-					rz = (float)(rz * Math.PI / 180.0);
-				}
 			}
 
 			var xclSub = subs.FirstOrDefault(s => s.Type == "XSCL");
@@ -1785,14 +1775,14 @@ public partial class Megaton : Node3D
 			fo3Y = (wd.NwCellY + wd.SeCellY) * CellSize / 2f;
 		}
 
-		float godotX = (fo3X - wd.Center.X) * WorldScale;
-		float godotZ = -(fo3Y - wd.Center.Y) * WorldScale;
+		float engineX = (fo3X - wd.Center.X) * WorldScale;
+		float engineZ = -(fo3Y - wd.Center.Y) * WorldScale;
 
-		float godotY = wd.DefaultLandHeight * WorldScale + 20f;
+		float engineY = wd.DefaultLandHeight * WorldScale + 20f;
 
-		target.GlobalPosition = new Vector3(godotX, godotY, godotZ);
+		target.GlobalPosition = new Vector3(engineX, engineY, engineZ);
 
-		GD.Print($"[Megaton] Player -> ({godotX:F1}, {godotY:F1}, {godotZ:F1}) for '{wd.Name}'");
+		GD.Print($"[Megaton] Player -> ({engineX:F1}, {engineY:F1}, {engineZ:F1}) for '{wd.Name}'");
 	}
 
 	private bool TryReadStartPosition(string worldName, out float fo3X, out float fo3Y)
@@ -1898,21 +1888,21 @@ public partial class Megaton : Node3D
 		}
 
 		// Convert FO3 coords to Godot coords in the target world
-		float godotX = (fo3X - wd.Center.X) * WorldScale;
-		float godotZ = -(fo3Y - wd.Center.Y) * WorldScale;
-		float godotY = fo3Z * WorldScale;
+		float engineX = (fo3X - wd.Center.X) * WorldScale;
+		float engineZ = -(fo3Y - wd.Center.Y) * WorldScale;
+		float engineY = fo3Z * WorldScale;
 
 		ShowWorld(worldName, repositionCamera: false);
 
 		var cam = GetViewport()?.GetCamera3D();
 		if (cam != null)
 		{
-			cam.GlobalPosition = new Vector3(godotX, godotY, godotZ);
+			cam.GlobalPosition = new Vector3(engineX, engineY, engineZ);
 		}
 
 		// Cooldown to prevent rapid back-and-forth switching
 		_autoSwitchCooldown = 60;
-		GD.Print($"[Megaton] Auto-switched to world: {worldName} at ({godotX:F1}, {godotY:F1}, {godotZ:F1})");
+		GD.Print($"[Megaton] Auto-switched to world: {worldName} at ({engineX:F1}, {engineY:F1}, {engineZ:F1})");
 	}
 
 	private async Task LoadWorldAndSwitchAutoAsync(string worldName, float fo3X, float fo3Y, float fo3Z)
@@ -1942,9 +1932,13 @@ public partial class Megaton : Node3D
 			// NPC/CREA handling: create NpcAgent with skinned mesh + AI
 			if (isNpc)
 			{
-				Vector3 godotEuler = new Vector3(req.Rotation.X, req.Rotation.Z, -req.Rotation.Y);
-				Basis godotRot = Basis.FromEuler(godotEuler, EulerOrder.Xzy);
-				var basis = godotRot.Scaled(Vector3.One * req.Scale);
+				Basis rX = new Basis(new Vector3(1, 0, 0), -req.Rotation.X);
+				Basis rY = new Basis(new Vector3(0, 1, 0), -req.Rotation.Y);
+				Basis rZ = new Basis(new Vector3(0, 0, 1), -req.Rotation.Z);
+				Basis fo3Rot = rZ * rY * rX;
+				Basis toEngine = new Basis(new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
+				Basis engineRot = toEngine * fo3Rot * toEngine.Inverse();
+				var basis = engineRot.Scaled(Vector3.One * req.Scale);
 				var transform = new Transform3D(basis, req.Position);
 
 				var npcAgent = new NpcAgent();
@@ -1986,9 +1980,13 @@ public partial class Megaton : Node3D
 			// Check for skinned node hierarchy (skeleton + skinned meshes)
 			if (isSkinned)
 			{
-				Vector3 godotEuler = new Vector3(req.Rotation.X, req.Rotation.Z, -req.Rotation.Y);
-				Basis godotRot = Basis.FromEuler(godotEuler, EulerOrder.Xzy);
-				var basis = godotRot.Scaled(Vector3.One * req.Scale);
+				Basis rX = new Basis(new Vector3(1, 0, 0), -req.Rotation.X);
+				Basis rY = new Basis(new Vector3(0, 1, 0), -req.Rotation.Y);
+				Basis rZ = new Basis(new Vector3(0, 0, 1), -req.Rotation.Z);
+				Basis fo3Rot = rZ * rY * rX;
+				Basis toEngine = new Basis(new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
+				Basis engineRot = toEngine * fo3Rot * toEngine.Inverse();
+				var basis = engineRot.Scaled(Vector3.One * req.Scale);
 				var transform = new Transform3D(basis, req.Position);
 
 				foreach (var srcNode in skinnedNodes)
@@ -2005,9 +2003,13 @@ public partial class Megaton : Node3D
 			{
 				if (mesh == null && req.BaseType != "LIGH") return;
 
-				Vector3 godotEuler = new Vector3(req.Rotation.X, req.Rotation.Z, -req.Rotation.Y);
-				Basis godotRot = Basis.FromEuler(godotEuler, EulerOrder.Xzy);
-				var basis = godotRot.Scaled(Vector3.One * req.Scale);
+				Basis rX = new Basis(new Vector3(1, 0, 0), -req.Rotation.X);
+				Basis rY = new Basis(new Vector3(0, 1, 0), -req.Rotation.Y);
+				Basis rZ = new Basis(new Vector3(0, 0, 1), -req.Rotation.Z);
+				Basis fo3Rot = rZ * rY * rX;
+				Basis toEngine = new Basis(new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
+				Basis engineRot = toEngine * fo3Rot * toEngine.Inverse();
+				var basis = engineRot.Scaled(Vector3.One * req.Scale);
 				var transform = new Transform3D(basis, req.Position);
 
 				if (mesh != null && _nifCache.TryGetValue(req.Path, out var nif))
@@ -2040,9 +2042,13 @@ public partial class Megaton : Node3D
 		// Create particle systems from the NIF
 		if (!string.IsNullOrEmpty(req.Path) && _particleCache.TryGetValue(req.Path, out var particles))
 		{
-			Vector3 godotEuler = new Vector3(req.Rotation.X, req.Rotation.Z, -req.Rotation.Y);
-			Basis godotRot = Basis.FromEuler(godotEuler, EulerOrder.Xzy);
-			var basis = godotRot.Scaled(Vector3.One * req.Scale);
+			Basis rX = new Basis(new Vector3(1, 0, 0), -req.Rotation.X);
+			Basis rY = new Basis(new Vector3(0, 1, 0), -req.Rotation.Y);
+			Basis rZ = new Basis(new Vector3(0, 0, 1), -req.Rotation.Z);
+			Basis fo3Rot = rZ * rY * rX;
+			Basis toEngine = new Basis(new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
+			Basis engineRot = toEngine * fo3Rot * toEngine.Inverse();
+			var basis = engineRot.Scaled(Vector3.One * req.Scale);
 			var worldTransform = new Transform3D(basis, req.Position);
 
 			foreach (var pEntry in particles)
